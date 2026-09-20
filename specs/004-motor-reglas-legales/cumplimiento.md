@@ -112,7 +112,7 @@ de cumplimiento, que sólo puede hacerse sobre la implementación en G5.
 
 | Norma | Artículo | Qué exige | Cómo lo cumple la feature |
 | --- | --- | --- | --- |
-| Decreto 484/87 | Art. 1 `[V]` (porcentajes verificados vía buscador oficial; **texto exacto no verificado** `[P]`) | Las remuneraciones son inembargables hasta el importe del SMVM. Por encima: las que no superan el doble del SMVM son embargables hasta el **10% del importe que exceda** el SMVM; las que superan el doble del SMVM, hasta el **20% del importe que exceda** el SMVM. | CA-18 (cero bajo el mínimo), CA-19 (primer tramo sobre el excedente), CA-20 (tramo superior sobre el excedente, con detalle tramo por tramo). **La spec acierta en lo que más se equivoca en la práctica: el porcentaje se aplica sobre el excedente, no sobre el total.** |
+| Decreto 484/87 | Art. 1 `[C]` (texto corroborado el 2026-09-20 por buscador; **fuente oficial no leída**) | Las remuneraciones de cada período mensual **y cada cuota del aguinaldo** son inembargables hasta el importe mensual del SMVM. Por encima, los incisos 1 y 2 fijan 10% y 20% **"del importe que excediere de este último"** — misma fórmula en ambos. | CA-18 (cero bajo el mínimo), CA-19 (primer tramo sobre el excedente), CA-20 (tramo superior sobre el excedente). **La spec acierta en lo que más se equivoca en la práctica: el porcentaje se aplica sobre el excedente, no sobre el total.** `[!]` **Pero la base del excedente del inciso 2 quedó en disputa tras la verificación: la ambigüedad está en la norma, no en nuestro acceso a ella.** Ver §5.D y §8.3. |
 | Decreto 484/87 | Excepción por cuota alimentaria y litisexpensas `[P]` | `[I]` Los topes no rigen del mismo modo frente a embargos por alimentos, que fija el juez. | **No hay ninguna CA que lo contemple.** Si el motor dice "el embargo excede el tope" frente a un embargo alimentario, el hallazgo es falso y potencialmente dañoso. Defecto D-17. |
 | LCT | Art. 120 — inembargabilidad del SMVM `[P]` | El SMVM es inembargable salvo por deudas alimentarias. | Base del CA-18. |
 | LCT | Art. 147 — cuota de embargabilidad `[P]` | Remuneraciones embargables sólo en la proporción que fije la reglamentación (el Decreto 484/87). | Cita obligatoria junto al decreto (CA-27). |
@@ -126,7 +126,7 @@ de cumplimiento, que sólo puede hacerse sobre la implementación en G5.
 
 | Norma | Artículo | Qué exige | Cómo lo cumple la feature |
 | --- | --- | --- | --- |
-| Ley 27.423 | Pacto de cuota litis — **numeración del artículo pendiente de verificar** (arts. 5 y/o 6) `[P]` | `[V]` en cuanto al contenido reportado por la fuente oficial: el pacto no puede exceder el **30%** del resultado económico del pleito, cualquiera sea el número de pactos y de profesionales intervinientes; puede llegar al **40%** del resultado neto sólo si el profesional asume expresamente las costas de la defensa del cliente y la obligación de responder por ellas; en asuntos **previsionales, alimentarios y con menores** que actúan con representación legal, no puede exceder el **20%**. | CA-23 (límite conjunto) y CA-24 (límite diferenciado). Los porcentajes van como parámetros. **La numeración del artículo debe verificarse antes de citarla en un documento que salga al cliente** (§8). |
+| Ley 27.423 | Pacto de cuota litis — **art. 6** `[C]` (numeración resuelta en la ronda del 2026-09-20) | El pacto no puede exceder el **30%** del resultado del pleito, cualquiera sea el número de pactos y de profesionales intervinientes `[V]`; puede llegar al **40%** sólo si el profesional asume expresamente las costas de la defensa del cliente `[V]`; se exige **forma escrita, con tantos ejemplares como partes** `[C]`. En asuntos **previsionales, alimentarios y con menores** con representación legal: `[!]` **este documento decía "hasta el 20%"; la verificación indica que el inc. c) podría ser una PROHIBICIÓN de pactar cuota litis, con nulidad absoluta.** | CA-23 (límite conjunto) y CA-24 (límite diferenciado). Los porcentajes van como parámetros. **CA-24 no puede implementarse hasta resolver si en materias protegidas hay tope o prohibición** (§5.E, §8.2.5). La spec además **no modela el requisito de forma escrita**, y un pacto sin él es atacable. |
 | Ley 27.423 | Nulidad de la renuncia anticipada de honorarios `[V]` | Es nula toda renuncia anticipada de honorarios o convenio que tienda a reducir las proporciones arancelarias, salvo con parientes cercanos del profesional. | `[I]` **Relevante para el modelo de negocio**: un convenio con la plataforma que obligue al abogado a resignar honorarios podría caer bajo esta nulidad. No es del motor, pero hay que mirarlo en la feature 018. |
 | LCT | Art. 277 — pacto de cuota litis en materia laboral `[P]` | `[I]` Tope diferenciado del 20% en asuntos laborales. **Hay que verificar si el texto ordenado vigente lo mantiene y si fue alcanzado por el DNU 70/2023 o por la Ley 27.742.** | CA-24. El valor queda propuesto pero marcado como pendiente de verificación documental. |
 | Leyes arancelarias provinciales | Según jurisdicción `[D]` | Cada provincia tiene su propia ley arancelaria y su propio régimen de cuota litis. | CA-25 y CA-26. **CA-26 es correcto y hay que defenderlo**: sin parámetros cargados, INDETERMINABLE, y **no** aplicar el límite nacional por defecto. |
@@ -493,6 +493,24 @@ Verificado durante esta revisión `[V]`:
 
 **Condición C-05.**
 
+> **Actualización de la ronda del 2026-09-20** (`specs/legal/verificacion-documental.md` §3.2).
+>
+> - Se obtuvo el **texto anterior** del art. 18 `[C]` y trae un dato que cambia el
+>   modelo de parámetros: **la cláusula de no capitalización ya estaba ahí**. El
+>   DNU suprimió el primer párrafo (el tope del 50%) y conservó el segundo. Por lo
+>   tanto `intereses.punitorioNoCapitalizable.tarjeta` **no necesita doble
+>   vigencia**; sólo la necesita el tope.
+> - El **estado del DNU se confirma** `[C]`: rechazado por el Senado, **no tratado
+>   por Diputados** y por eso vigente; la CSJN rechazó los planteos por ausencia de
+>   caso concreto; hay capítulos suspendidos por tribunales inferiores, entre ellos
+>   el Título IV laboral.
+> - **Lo que sigue sin resolverse es la fecha de corte**, que es justamente lo que
+>   el motor necesita para decidir deuda por deuda. La fecha del 29/12/2023 que
+>   circula es una inferencia del art. 5 del CCyC, **no un texto**. Ver el
+>   parámetro `intereses.fechaCorteDNU70_2023` en §5.B.
+> - `[I]` **El estado del DNU es un dato vivo.** Todo esto vale al 2026-09-20 y
+>   debe reconsultarse antes de cada puesta en producción.
+
 ### 4.5 El análisis B no tiene, en el régimen general, un tope legal automático
 
 `[I]` La spec, en CA-09, habla de "exceso" respecto de un "tope configurado". Fuera
@@ -521,6 +539,34 @@ por primera vez. Existe jurisprudencia de la Corte Suprema sobre este punto que
 con mayor relación entre impacto y grado de incertidumbre de toda la tabla del §5.
 Hasta que el estudio lo ratifique **por escrito y con la cita del fallo**, el
 análisis C no debe emitir el estado CADUCADO. **Condición C-06.**
+
+> **Actualización de la ronda del 2026-09-20** (`specs/legal/verificacion-documental.md` §3.4).
+>
+> El punto **no se resolvió, pero dejó de estar a ciegas**. Hay dos fuentes
+> nominadas y **dicen cosas distintas**:
+>
+> 1. **Decreto 1558/2001, art. 26** `[C]` —reglamentario de la Ley 25.326, que este
+>    documento no había identificado—: los cinco años *"se contarán a partir de la
+>    fecha de la última información adversa archivada que revele que dicha deuda
+>    era exigible"*.
+> 2. **CSJN, "Catania, Américo Marcial c/ BCRA s/ habeas data", 08/11/2011**,
+>    citado como **Fallos 334:1276** `[C]`: según las reseñas consultadas, el plazo
+>    **no se posterga** mientras la deuda siga siendo exigible y no esté
+>    prescripta. El texto de la sentencia no pudo leerse.
+>
+> `[I]` La tensión es sustantiva: el criterio del decreto permitiría al acreedor
+> **estirar el plazo indefinidamente reinformando la deuda**, que es exactamente
+> lo que el "derecho al olvido" quiso impedir. **La pregunta para el estudio ya no
+> es si existe jurisprudencia, sino cuál criterio prevalece y cómo se traduce en
+> una fecha calculable con los datos que el cliente puede aportar.**
+>
+> Dato adicional corroborado, no contemplado en la spec: para los **datos de
+> cumplimiento sin mora no opera plazo alguno** de eliminación, y la reducción a
+> dos años estaría condicionada a que **el deudor acredite** que la última
+> información disponible coincide con la extinción — una carga probatoria que el
+> motor debería anticipar en vez de sorprender al cliente con ella.
+>
+> **C-06 sigue vigente sin cambios.**
 
 ### 4.7 Conflicto de interés en el impacto económico estimado
 
@@ -631,38 +677,39 @@ normativa, conforme R-02 y CA-29.
 | --- | --- | --- | --- | --- | --- |
 | `archivoCrediticio.plazoGeneral` | Plazo máximo durante el cual un dato de solvencia puede archivarse, registrarse o cederse. | Ley 25.326 art. 26 inc. 4 `[V]` | **5 años** `[V]` | | |
 | `archivoCrediticio.plazoAbreviadoPorExtincion` | Plazo reducido cuando el deudor cancela o de otro modo extingue la obligación. | Ley 25.326 art. 26 inc. 4 `[V]` | **2 años** `[V]`, computados desde la extinción `[P]` | | |
-| `archivoCrediticio.diesAQuo.plazoGeneral` | Desde qué hecho exacto se cuentan los 5 años. | Ley 25.326 art. 26 inc. 4 + jurisprudencia CSJN `[D]` | `A DETERMINAR POR EL ESTUDIO` — **el parámetro más peligroso del análisis C**. Ver §4.6. **El estudio debe entregar la regla con la cita del fallo que la sostiene.** | | |
-| `archivoCrediticio.diesAQuo.plazoAbreviado` | Desde qué hecho se cuentan los 2 años. | Ídem `[D]` | `A DETERMINAR POR EL ESTUDIO` — presumiblemente la fecha de extinción `[I]`, pero hay que decidir qué es "extinción" cuando hubo acuerdo, refinanciación o pago parcial | | |
+| `archivoCrediticio.diesAQuo.plazoGeneral` | Desde qué hecho exacto se cuentan los 5 años. | **Decreto 1558/2001, art. 26** `[C]` (reglamentario de la Ley 25.326) **en tensión con** CSJN, *"Catania, Américo Marcial c/ BCRA s/ habeas data"*, 08/11/2011, citado como **Fallos 334:1276** `[C]` | `A DETERMINAR POR EL ESTUDIO` — **sigue siendo el parámetro más peligroso del análisis C**, pero la ronda del 2026-09-20 **nominó las dos fuentes**. **(a)** Decreto 1558/2001 art. 26, texto corroborado: *"…se tendrá en cuenta toda la información disponible desde el nacimiento de cada obligación hasta su extinción. En el cómputo de CINCO (5) años, éstos se contarán a partir de la fecha de la **última información adversa archivada que revele que dicha deuda era exigible**."* **(b)** Según las reseñas consultadas, en *Catania* la Corte sostuvo que **el plazo de cinco años no se posterga mientras la deuda siga siendo exigible y no esté prescripta**. `[I]` **Los dos criterios apuntan en direcciones opuestas**: el del decreto permite al acreedor extender el plazo indefinidamente reinformando la deuda. **Pregunta concreta para el estudio: cuál prevalece, y cómo se traduce en una fecha calculable.** El texto de la sentencia no pudo leerse (SAIJ bloqueado). | | |
+| `archivoCrediticio.diesAQuo.plazoAbreviado` | Desde qué hecho se cuentan los 2 años. | Decreto 1558/2001 art. 26 `[C]` | `A DETERMINAR POR EL ESTUDIO`. Corroborado 2026-09-20 que el decreto condiciona la reducción a que **el deudor acredite que la última información disponible coincide con la extinción de la deuda** `[C]`. `[I]` Eso agrega una **carga probatoria sobre el deudor** que la spec no modela. Sigue abierto qué es "extinción" cuando hubo acuerdo, refinanciación o pago parcial. | | |
+| `archivoCrediticio.datosDeCumplimiento.sinPlazo` | Si los datos de cumplimiento sin mora tienen plazo de eliminación. | Decreto 1558/2001 art. 26 `[C]` | **No opera plazo alguno de eliminación** para los datos de cumplimiento sin mora `[C]` — corroborado 2026-09-20. `[I]` **No está contemplado en la spec** y es información que el cliente va a pedir: no todo dato del informe es suprimible por antigüedad. | | |
 | `archivoCrediticio.registro.bureauPrivado` | Régimen aplicable a los bureaus privados. | Ley 25.326 art. 26 `[V]` | Los dos plazos anteriores | | |
-| `archivoCrediticio.registro.centralDeudoresBCRA` | Plazo de permanencia en la Central de Deudores del Sistema Financiero del BCRA, que **es un registro distinto con régimen propio**. | Comunicación del BCRA aplicable `[D]` | `A DETERMINAR POR EL ESTUDIO` — **y hay que identificar el número de la comunicación vigente**, sin el cual CA-27 no puede cumplirse. Defecto D-16, condición C-06. | | |
-| `archivoCrediticio.plazoRespuestaSupresion` | Plazo del responsable para rectificar, actualizar o suprimir. | Ley 25.326 art. 16 `[P]` | **5 días hábiles** `[P]` (valor que ya asume `docs/03`) — requiere verificación documental | | |
-| `archivoCrediticio.plazoRespuestaAcceso` | Plazo para responder el pedido de acceso. | Ley 25.326 art. 14 `[P]` | **10 días corridos** `[P]`, con gratuidad de periodicidad semestral `[P]` — requiere verificación | | |
+| `archivoCrediticio.registro.centralDeudoresBCRA` | Plazo de permanencia en la Central de Deudores del Sistema Financiero del BCRA, que **es un registro distinto con régimen propio**. | Comunicación del BCRA aplicable `[D]` | `A DETERMINAR POR EL ESTUDIO`. Ronda 2026-09-20: se **identificó la fuente pero no se leyó**. La norma sería el **"Régimen Informativo de Deudores del Sistema Financiero (R.I.–D.S.F.)"**, articulado con el texto ordenado de "Clasificación de deudores"; aparecieron asociadas las Comunicaciones **"A" 3119, 4765 y 8045**, **ninguna verificada como vigente**. La cifra de **24 meses** que circula proviene de una publicación institucional del BCRA en redes, **no de una norma**, y `[I]` podría ser la **ventana de consulta del informe público** y no el plazo de permanencia del dato: son cosas distintas y confundirlas produce el riesgo RL-06. `www.bcra.gob.ar` bloqueado. Defecto D-16, condición C-06. | | |
+| `archivoCrediticio.plazoRespuestaSupresion` | Plazo del responsable para rectificar, actualizar o suprimir. | Ley 25.326 art. 16 `[C]` | **5 días hábiles** `[C]` — corroborado 2026-09-20, coincide con el valor que ya asume `docs/03`. Plazo contado desde la recepción del reclamo o desde que se advierte el error o falsedad. | | |
+| `archivoCrediticio.plazoRespuestaAcceso` | Plazo para responder el pedido de acceso. | Ley 25.326 art. 14 `[C]` | **10 días corridos** `[C]` — corroborado 2026-09-20. `[!]` **Discrepancia menor entre fuentes**: un resultado habla de "diez días hábiles". Se mantiene "corridos" por ser lo que dicen la mayoría de las fuentes y `docs/03`, **pero el estudio debe confirmarlo**. Gratuidad con periodicidad semestral: sigue `[P]`, no se corroboró. | | |
 | `archivoCrediticio.umbralAlertaDias` | Antelación del estado PROXIMO_A_CADUCAR (CA-17). | Producto, no normativo `[I]` | **90 días** `[I]` — propuesta del revisor | | |
 
 ### 5.D — Embargabilidad de haberes
 
 | Parámetro | Qué representa | Norma que lo funda | Valor propuesto | Validado por | Fecha |
 | --- | --- | --- | --- | --- | --- |
-| `embargo.montoInembargable` | Porción de la remuneración absolutamente inembargable. | Decreto 484/87 art. 1 `[V]`; LCT art. 120 `[P]` | **El importe del SMVM vigente a la fecha del hecho** `[V]` | | |
-| `embargo.tramo1.limiteSuperior` | Techo del primer tramo. | Decreto 484/87 art. 1 `[V]` | **2 veces el SMVM** `[V]` | | |
-| `embargo.tramo1.porcentaje` | Porcentaje embargable en el primer tramo, **aplicado sobre el excedente del SMVM, no sobre el total**. | Decreto 484/87 art. 1 `[V]` | **10% del importe que exceda el SMVM** `[V]` | | |
-| `embargo.tramo2.porcentaje` | Porcentaje embargable por encima de 2 SMVM, **sobre el excedente del SMVM** `[P]`. | Decreto 484/87 art. 1 `[V]` | **20% del importe que exceda el SMVM** `[V]`. `[D]` **Verificar si el excedente se mide sobre 1 SMVM o sobre 2 SMVM**: el texto exacto del artículo no pudo leerse y la diferencia cambia el resultado en todos los sueldos medios de la cartera. **Este es el punto de verificación más urgente del análisis D.** | | |
+| `embargo.montoInembargable` | Porción de la remuneración absolutamente inembargable. | Decreto 484/87 art. 1 `[V]`/`[C]`; LCT art. 120 `[P]` | **El importe mensual del SMVM vigente a la fecha del hecho** `[V]`. Texto corroborado 2026-09-20: *"Las remuneraciones devengadas por los trabajadores en cada período mensual, **así como cada cuota del sueldo anual complementario**, son inembargables hasta una suma equivalente al importe mensual del SALARIO MINIMO VITAL…"* `[I]` **Hallazgo: el decreto trata expresamente el aguinaldo**, aplicándole el mismo piso por cuota. Eso da una base para `embargo.tratamientoSAC`, que hoy está en `[D]`. | | |
+| `embargo.tramo1.limiteSuperior` | Techo del primer tramo. | Decreto 484/87 art. 1 inc. 1 `[C]` | **2 veces el SMVM** `[V]` — corroborado 2026-09-20 | | |
+| `embargo.tramo1.porcentaje` | Porcentaje embargable en el primer tramo, **aplicado sobre el excedente del SMVM, no sobre el total**. | Decreto 484/87 art. 1 inc. 1 `[C]` | **10% del importe que exceda el SMVM** `[V]` — corroborado 2026-09-20. `[I]` En el inciso 1 la base **no** está en disputa: la lectura alternativa daría cero embargable entre 1 y 2 SMVM, lo que es absurdo. La disputa es sólo en el inciso 2: ver la fila siguiente. | | |
+| `embargo.tramo2.porcentaje` | Porcentaje embargable por encima de 2 SMVM. La base del excedente está **en disputa**. | Decreto 484/87 art. 1 inc. 2 `[C]` | **20%** `[V]`. **Base del excedente: `[!]` CONTRADICCIÓN ABIERTA — NO CARGAR.** La ronda del 2026-09-20 obtuvo el texto y **el resultado no es el esperado: el problema no es que no se conozca el texto, es que el texto es ambiguo.** Los dos incisos usan la **misma fórmula**: inc. 1 *"…hasta el diez por ciento (10%) del importe que excediere de **este último**"*; inc. 2 *"…hasta el veinte por ciento (20%) del importe que excediere de **este último**"*. La pregunta se traslada a qué remite "este último" en el inc. 2: **(L1)** el SMVM → 20% de (remuneración − 1 SMVM); **(L2)** el doble del SMVM → 20% de (remuneración − 2 SMVM). `[I]` En el inc. 1 L2 sería absurda (nada embargable entre 1 y 2 SMVM), lo que fuerza L1 **ahí**; en el inc. 2 L2 **no** es absurda. A favor de L1: el paralelismo y el encabezado *"Las remuneraciones superiores **a ese importe**"*, donde "ese importe" es inequívocamente el SMVM. A favor de L2: la regla del antecedente más próximo. **Es una cuestión de interpretación, no de transcripción, y por definición está fuera de lo que este agente puede resolver.** Lo que hay que pedirle al estudio cambia: ya no "confirmar el texto" sino **"dictaminar cuál lectura rige, con la jurisprudencia que la sostenga"**. Ver `specs/legal/verificacion-documental.md` §3.1. | | |
 | `embargo.baseDeCalculo` | Qué se entiende por remuneración sobre la que se calcula (bruta, neta, qué deducciones). | LCT arts. 133 y 147 `[P]`; Decreto 484/87 `[P]` | `A DETERMINAR POR EL ESTUDIO` — la spec dice "remuneración neta" sin definirla | | |
 | `embargo.tratamientoSAC` | Cómo se computa el aguinaldo. | `[D]` | `A DETERMINAR POR EL ESTUDIO` | | |
 | `embargo.excepcionAlimentos` | Los topes no rigen del mismo modo frente a embargos por alimentos o litisexpensas. | Decreto 484/87 `[P]`; LCT art. 120 `[P]` | `A DETERMINAR POR EL ESTUDIO` — **mientras no esté cargado, el motor no debe evaluar embargos de causa alimentaria**. Defecto D-17. | | |
-| `embargo.haberesPrevisionales` | Régimen de embargabilidad de jubilaciones y pensiones, distinto del salarial. | Ley 24.241 y concordantes `[D]` | `A DETERMINAR POR EL ESTUDIO` — **mientras no esté cargado, INDETERMINABLE**, nunca aplicar el Decreto 484/87 por defecto. Defecto D-19, riesgo RL-11. | | |
+| `embargo.haberesPrevisionales` | Régimen de embargabilidad de jubilaciones y pensiones, distinto del salarial. | **Ley 24.241, art. 14 inc. c** `[C]` | `A DETERMINAR POR EL ESTUDIO`, pero **la ronda del 2026-09-20 confirmó que el régimen es de otra naturaleza, no una variante de la escala salarial** `[C]`: las prestaciones previsionales **son inembargables**, con la salvedad de las **cuotas por alimentos y litisexpensas**. No hay escala de 10%/20%: hay inembargabilidad. `[I]` **El defecto D-19 y el riesgo RL-11 quedan confirmados y, a criterio de este revisor, subestimados en su calificación original.** Aplicar el Decreto 484/87 a un jubilado no le inventaría un derecho: **se lo ocultaría**, diciéndole que un descuento está "dentro del tope" cuando podría no corresponder en absoluto. **Alcance práctico `[D]`**: aparecieron casos de aplicación analógica del Decreto 484/87 a haberes de empleados públicos y algún embargo sobre jubilaciones; no se verificó el alcance de esas excepciones. **Mientras no esté ratificado, INDETERMINABLE; nunca aplicar el Decreto 484/87 por defecto.** | | |
 | `embargo.indemnizacionesLaborales` | Inembargabilidad de indemnizaciones por despido o accidente. | LCT art. 149 `[P]` | `A DETERMINAR POR EL ESTUDIO`. Defecto D-18. | | |
-| `embargo.cuentaSueldo.intangibilidad` | Protección de los fondos acreditados en cuenta sueldo y prohibición de que el banco compense o debite para cobrarse. | Comunicación del BCRA sobre cuenta sueldo `[D]` | `A DETERMINAR POR EL ESTUDIO` — **hay que identificar la comunicación y su número**, sin el cual CA-22 no puede citar la norma como exige CA-27. `[I]` Además hay que precisar el alcance: la intangibilidad frente al banco no equivale a inembargabilidad frente a un juez. | | |
+| `embargo.cuentaSueldo.intangibilidad` | Protección de los fondos acreditados en cuenta sueldo y prohibición de que el banco compense o debite para cobrarse. | Comunicación del BCRA sobre cuenta sueldo `[D]` | `A DETERMINAR POR EL ESTUDIO`. Ronda 2026-09-20: **fuente identificada, texto no leído** (`www.bcra.gob.ar` bloqueado). La norma estaría en el texto ordenado **"Depósitos de ahorro, cuenta sueldo y especiales"** (`bcra.gob.ar/archivos/Pdfs/texord/t-depaho.pdf`); aparecieron asociadas las Comunicaciones **"A" 6042, 6610, 6909, 7062, 8027, 8106 y 8343**, **ninguna verificada como la vigente en la materia**. **No se obtuvo el punto normativo concreto**, por lo que CA-22 sigue sin poder citar la norma que exige CA-27. `[I]` Además apareció una pista **sin verificar** que la revisión anterior no tenía: un régimen por el cual el **saldo** de la cuenta sueldo sería inembargable hasta **tres veces el salario promedio de los últimos seis meses**. Si fuera correcto, el análisis D tendría una regla propia del saldo en cuenta, distinta de la escala salarial. Sigue pendiente precisar que la intangibilidad frente al banco **no** equivale a inembargabilidad frente a un juez. | | |
 | `embargo.smvm.serieHistorica` | Valor del SMVM con vigencia desde/hasta. | Resoluciones del Consejo Nacional del Empleo, la Productividad y el SMVM `[D]` | `A DETERMINAR` — no es un valor sino una **serie**. Debe cargarse con su resolución y su fecha (decisión 004-C). Sin valor para la fecha evaluada: INDETERMINABLE. | | |
 
 ### 5.E — Honorarios y cuota litis
 
 | Parámetro | Qué representa | Norma que lo funda | Valor propuesto | Validado por | Fecha |
 | --- | --- | --- | --- | --- | --- |
-| `cuotaLitis.topeGeneral.nacionalFederal` | Máximo del pacto de cuota litis sobre el resultado económico del pleito, cualquiera sea el número de pactos y de profesionales. | Ley 27.423, **art. 5 o 6 — numeración a verificar** `[P]`; contenido `[V]` | **30% del resultado económico obtenido** `[V]` | | |
-| `cuotaLitis.topeAmpliado.conAsuncionDeCostas` | Máximo cuando el profesional asume expresamente las costas de la defensa del cliente y la obligación de responder por ellas. | Ley 27.423 `[V]` | **40% del resultado neto** `[V]` | | |
-| `cuotaLitis.topeMateriasProtegidas` | Máximo en asuntos previsionales, alimentarios y en los que actúan menores con representación legal. | Ley 27.423 `[V]` | **20%** `[V]` | | |
-| `cuotaLitis.topeLaboral` | Máximo en materia laboral. | LCT art. 277 `[P]` | **20%** `[P]` — **requiere verificación documental**, incluida la incidencia del DNU 70/2023 y de la Ley 27.742 sobre el texto vigente | | |
+| `cuotaLitis.topeGeneral.nacionalFederal` | Máximo del pacto de cuota litis sobre el resultado económico del pleito, cualquiera sea el número de pactos y de profesionales. | **Ley 27.423, art. 6** `[C]` — **numeración resuelta en la ronda del 2026-09-20**; contenido `[V]` | **30% del resultado del pleito** `[V]` — texto corroborado: *"…no podrá exceder del treinta por ciento (30%) del resultado del pleito, cualquiera fuese el número de pactos celebrados e independientemente del número de profesionales intervinientes."* Requisito de forma corroborado: **por escrito, antes o después de iniciado el juicio, con tantos ejemplares como partes hubiera** `[C]` — `[I]` **la spec no modela el requisito de forma**, y un pacto sin él es atacable. | | |
+| `cuotaLitis.topeAmpliado.conAsuncionDeCostas` | Máximo cuando el profesional asume expresamente las costas de la defensa del cliente y la obligación de responder por ellas. | Ley 27.423 art. 6 `[C]` | **40%** `[V]` — corroborado 2026-09-20 | | |
+| `cuotaLitis.topeMateriasProtegidas` | Régimen en asuntos previsionales, alimentarios y en los que actúan menores con representación legal. | Ley 27.423 art. 6 inc. c `[!]` | `[!]` **CONTRADICCIÓN ABIERTA — NO CARGAR. El valor `20%` que traía este documento marcado `[V]` queda degradado.** La ronda del 2026-09-20 obtuvo fuentes que atribuyen al **art. 6 inc. c)** una **prohibición**, no un tope: en esas materias los honorarios **"no podrán ser objeto de pacto de cuota litis"**. Lo refuerza un comunicado de una fiscalía federal sobre la **declaración de nulidad absoluta** de un pacto de cuota litis cobrado en una **causa previsional** (`fiscales.gob.ar`, Caleta Olivia). `[I]` **La diferencia no es de grado, es de naturaleza.** Si es prohibición, un motor que devuelva "hasta el 20%" estaría avalando un pacto **nulo**, sobre el grupo que la norma quiso proteger: sería el peor error posible del análisis E. **Este revisor no leyó el texto oficial y no elige entre las dos versiones.** Mientras tanto: **el análisis E no debe evaluar materias previsionales, alimentarias ni con menores.** | | |
+| `cuotaLitis.topeLaboral` | Máximo en materia laboral. | **LCT art. 277, según Ley 27.802 (BO 06/03/2026)** `[C]` | **20%** `[C]`, con **ratificación personal y homologación judicial**, y nulidad de pleno derecho del pacto no homologado — texto reseñado corroborado 2026-09-20. **Sigue sin poder cargarse**, por dos motivos nuevos: **(1)** la norma que hay que mirar **no es el DNU 70/2023 ni la Ley 27.742** como suponía este documento, sino la **Ley 27.802 de Modernización Laboral, publicada hace seis meses**, cuyo texto **no se leyó** (`boletinoficial.gob.ar` bloqueado); **(2)** hay **derecho transitorio en disputa** sobre su aplicación a juicios en trámite anteriores a marzo de 2026, por lo que `[I]` **la regla de vigencia por fecha del hecho (CA-29) no alcanza para este parámetro**. | | |
 | `cuotaLitis.baseDeCalculo` | Qué es el "resultado económico obtenido": bruto o neto, sobre la quita obtenida o sobre el monto efectivamente pagado, con o sin costas. | Ley 27.423 `[D]` | `A DETERMINAR POR EL ESTUDIO` — **crítico**, porque la comisión de éxito de la plataforma se calcula sobre una base análoga y la definición decide si CA-23 rechaza o no una combinación | | |
 | `cuotaLitis.nulidadRenunciaAnticipada` | Nulidad de la renuncia anticipada de honorarios o del convenio que reduzca las proporciones arancelarias. | Ley 27.423 `[V]` | **Aplicable** `[V]`. `[I]` Impacta en el convenio plataforma–abogado (spec 018), no en el motor. | | |
 | `comision.tratamientoFrenteAlTopeArancelario` | Si la comisión de éxito de la plataforma computa dentro del tope de cuota litis o se mide aparte. | Constitución #10; códigos de ética `[P]` | `A DETERMINAR POR DECISIÓN HUMANA` — no es un parámetro que el estudio pueda fijar solo: es encuadre de producto **y** deontología. Ver §4.8 y condición C-09. | | |
@@ -843,34 +890,68 @@ y volver a pasar la compuerta.
 
 ### Puntos que requieren verificación documental antes de producción
 
-El sitio de InfoLeg estuvo inaccesible desde este entorno y varios textos no
-pudieron leerse en su fuente oficial. **No usar ninguno de estos valores sin
-leer el texto vigente:**
+**Actualizado el 2026-09-20 tras la ronda de verificación.** Registro completo en
+`specs/legal/verificacion-documental.md`.
 
-1. Texto exacto del **art. 1 del Decreto 484/87**, en particular **si el excedente
-   del segundo tramo se mide sobre 1 o sobre 2 SMVM** (§5.D). Es el punto de
-   verificación más urgente.
-2. Texto del **art. 47 de la Ley 25.065** (plazos de prescripción de tarjetas).
-3. Texto del **art. 770 del CCyC** (supuestos y periodicidad de la capitalización)
-   y si el DNU 70/2023 afectó el capítulo de obligaciones dinerarias.
-4. Texto del **art. 18 de la Ley 25.065 anterior** al DNU 70/2023 y **fecha exacta**
-   de entrada en vigor del decreto.
-5. **Numeración del artículo** de la Ley 27.423 que regula el pacto de cuota litis
-   (arts. 5 y/o 6): el contenido se verificó, la numeración no.
-6. Texto vigente del **art. 277 de la LCT** y su eventual modificación por el DNU
-   70/2023 o la Ley 27.742.
-7. **Comunicación del BCRA** vigente sobre intangibilidad de cuenta sueldo: número
-   e identificación.
-8. **Régimen de permanencia** en la Central de Deudores del Sistema Financiero del
-   BCRA: norma y plazo.
-9. **Jurisprudencia de la CSJN** sobre el *dies a quo* del art. 26 inc. 4 de la
-   Ley 25.326: identificación de los fallos y regla aplicable.
-10. **Estado actualizado del DNU 70/2023** a la fecha de puesta en producción:
-    tratamiento en Diputados y medidas cautelares vigentes.
-11. Textos de las **leyes de colegiación** aplicables (Ley 23.187 y provinciales)
-    a los efectos del §4.2.
-12. **Régimen de embargabilidad de haberes previsionales** (Ley 24.241 y
-    concordantes).
+**Qué pasó en esa ronda, en una línea:** no se pudo abrir **ninguna** fuente
+oficial —la política de egreso de red de la sesión bloqueó SAIJ, Boletín Oficial,
+argentina.gob.ar, InfoLeg, bcra.gob.ar, cij.gov.ar y hasta un sitio de control—,
+así que **ningún punto pasó a `[V]`**. El único canal disponible fue un buscador;
+lo que produjo se marcó `[C]` y **se trata igual que `[P]` a los efectos del
+bloqueo de producción de la condición C-02**.
+
+#### 8.1 Cerrados por la ronda (quedan en `[C]`, siguen exigiendo C-03)
+
+Ya no hace falta **buscarlos**; hace falta que el estudio los **lea y los firme**.
+
+| Punto original | Resultado |
+| --- | --- |
+| 2 — art. 47 Ley 25.065 | 1 año la acción ejecutiva, 3 años las ordinarias. |
+| 3 — art. 770 CCyC | Cuatro supuestos y periodicidad mínima de 6 meses. **Queda abierto** si el DNU 70/2023 alcanzó el capítulo de obligaciones dinerarias. |
+| 4 — art. 18 Ley 25.065 anterior | Texto obtenido. **Hallazgo: la no capitalización ya estaba antes del DNU**; el DNU sólo suprimió el tope del 50%. **La fecha de vigencia sigue abierta** (punto 8.2.1). |
+| 5 — numeración Ley 27.423 | Es el **art. 6**. Resuelto. **Pero abrió una contradicción** (punto 8.2.5). |
+| 10 — estado del DNU 70/2023 | Rechazado por el Senado, **no tratado por Diputados**, por lo tanto vigente; CSJN rechazó los planteos por falta de caso; Título IV suspendido judicialmente. **Dato con fecha de vencimiento: reconsultar antes de cada puesta en producción.** |
+| 12 — haberes previsionales | Ley 24.241 art. 14 inc. c: **inembargables**, salvo cuotas por alimentos y litisexpensas. **No es una escala distinta: es otra naturaleza de protección.** Agrava D-19 y RL-11. |
+
+#### 8.2 Siguen abiertos, con el motivo
+
+| # | Punto | Estado y motivo |
+| --- | --- | --- |
+| 8.2.1 | **Fecha exacta de entrada en vigencia del DNU 70/2023** | **NO VERIFICADO.** Se corroboró la publicación (BO 21/12/2023). La fecha del 29/12/2023 que circula es una **inferencia doctrinaria** (art. 5 CCyC, octavo día) y no el texto del decreto; el artículo de vigencia no pudo leerse. Decide, deuda por deuda, si hay tope de punitorios. |
+| 8.2.2 | **Incidencia del DNU 70/2023 sobre el capítulo de obligaciones dinerarias del CCyC** | **NO VERIFICADO.** Ninguna consulta lo aclaró. Afecta a los arts. 770 y 771. |
+| 8.2.3 | **Arts. 2537 y 2553 del CCyC** (derecho transitorio y oportunidad procesal de la defensa) | **NO VERIFICADO.** Aparecieron mencionados, ninguna fuente transcribió el texto. Sostienen la condición C-07 y el parámetro de transición. |
+| 8.2.4 | **Alcance del art. 2562 inc. c del CCyC**: si los 2 años alcanzan a las cuotas de un préstamo personal | **NO VERIFICADO y reclasificado como cuestión interpretativa.** Decide el resultado en la mayoría de la cartera. |
+| 8.2.5 | **Art. 6 inc. c de la Ley 27.423** — materias previsionales, alimentarias y con menores | `[!]` **CONTRADICCIÓN ABIERTA.** Este documento traía "20% `[V]`"; las fuentes de la ronda indican **prohibición** de pactar cuota litis, con nulidad absoluta declarada en un caso previsional. **Hasta que se resuelva, el análisis E no debe evaluar esas materias.** |
+| 8.2.6 | **Art. 277 LCT** | **CORROBORADO PARCIAL, pregunta reformulada.** La norma a mirar **no es el DNU 70/2023 ni la Ley 27.742**, sino la **Ley 27.802 de Modernización Laboral, BO 06/03/2026**, cuyo texto no se leyó. Además hay **derecho transitorio en disputa** para juicios anteriores a marzo de 2026. |
+| 8.2.7 | **Comunicación del BCRA sobre intangibilidad de cuenta sueldo** | **NO VERIFICADO.** Fuente identificada (texto ordenado "Depósitos de ahorro, cuenta sueldo y especiales"; candidatas "A" 6042/6610/6909/7062/8027/8106/8343), **ninguna confirmada**. `bcra.gob.ar` bloqueado. Sin esto, CA-22 no puede cumplir CA-27. |
+| 8.2.8 | **Permanencia en la Central de Deudores del BCRA** | **NO VERIFICADO.** Fuente identificada (R.I.–D.S.F.; candidatas "A" 3119/4765/8045). La cifra de 24 meses proviene de una publicación institucional en redes, no de una norma, y podría ser la ventana de consulta del informe y no el plazo de permanencia del dato. |
+| 8.2.9 | ***Dies a quo* del art. 26 inc. 4 de la Ley 25.326** | **NO RESUELTO, pero con las fuentes nominadas.** Hallazgo nuevo: el **Decreto 1558/2001 art. 26** fija el cómputo desde la "última información adversa archivada que revele que dicha deuda era exigible", criterio **en tensión** con lo que las reseñas atribuyen a **CSJN, "Catania", 08/11/2011, Fallos 334:1276**. El texto de la sentencia no pudo leerse. La pregunta al estudio ya no es "si existe jurisprudencia" sino **cuál criterio prevalece y cómo se traduce en una fecha calculable**. |
+| 8.2.10 | **Leyes de colegiación provinciales y códigos de ética** | **NO VERIFICADO.** De la Ley 23.187 se corroboró el art. 1 y la exigencia de matrícula en el CPACF, **pero no el artículo que tipifica el ejercicio ilegal**, que es lo que importa para el §4.2 y RL-02. Las 24 jurisdicciones no se intentaron: con el canal disponible no producirían material citable. `[I]` **RL-02 no es jurisdiccional: la app se usa desde todo el país.** |
+| 8.2.11 | **Jurisprudencia sobre el inc. 2 del Decreto 484/87** | **INACCESIBLE.** Las sentencias pertinentes están en `cij.gov.ar` y `jus.mendoza.gov.ar`, ambos bloqueados. |
+
+#### 8.3 Reclasificado: el punto 1 dejó de ser un problema de búsqueda
+
+`[I]` El punto más urgente del §8 anterior era el texto del **art. 1 del Decreto
+484/87**. **Se obtuvo, y la respuesta reencuadra el problema:** los dos incisos
+usan la **misma fórmula** —"del importe que excediere de este último"—, de modo que
+**la ambigüedad está en la norma, no en nuestro acceso a ella**. No hay texto
+adicional que buscar.
+
+Consecuencia para el plan de trabajo: lo que hay que encargarle al estudio sobre
+este punto **no es una verificación sino un dictamen interpretativo**, con la
+jurisprudencia que lo sostenga. Lo mismo vale para 8.2.4 y 8.2.9. `[I]` Son las
+tres preguntas más caras de la tabla del §5 y conviene encargarlas primero, porque
+**ninguna se resuelve con más búsqueda**.
+
+#### 8.4 Bloqueo de red — se escala
+
+`[I]` Ningún agente de este repositorio puede hoy producir una cita normativa
+citable: la política de egreso bloquea todos los destinos. Para que una próxima
+ronda produzca `[V]` de verdad habría que habilitar, como mínimo,
+`servicios.infoleg.gob.ar`, `www.saij.gob.ar`, `www.argentina.gob.ar`,
+`www.boletinoficial.gob.ar`, `www.bcra.gob.ar`, `sj.csjn.gov.ar` y `www.cij.gov.ar`.
+**Mientras eso no ocurra, toda verificación documental depende de que una persona
+abra los sitios a mano.** Se escala al orquestador.
 
 ### Escalamiento al orquestador
 
@@ -904,6 +985,38 @@ Consultadas en línea el 2026-09-20. No se usaron fuentes de pago ni credenciale
 **No accesible desde este entorno:** `servicios.infoleg.gob.ar` (bloqueado por el
 proxy de egreso). Por eso el §8 lista doce puntos como "requiere verificación
 documental" en lugar de afirmarlos.
+
+### 9.1 Ronda de verificación documental — 2026-09-20
+
+Registro completo, con las consultas una por una y los intentos fallidos:
+**`specs/legal/verificacion-documental.md`**.
+
+**Accesos directos intentados y bloqueados** (`EGRESS_BLOCKED`, política de egreso
+de la sesión, no de los sitios): `www.argentina.gob.ar`, `www.saij.gob.ar`,
+`servicios.infoleg.gob.ar`, `www.boletinoficial.gob.ar`, `www.bcra.gob.ar`,
+`www.cij.gov.ar`, `www.trabajo.gba.gov.ar` y `es.wikipedia.org` (este último como
+prueba de control, que confirmó que el bloqueo es del entorno).
+
+**Canal efectivamente usado:** buscador web. Devuelve transcripciones atribuidas a
+fuentes oficiales, **sin posibilidad de confirmar fidelidad ni vigencia**. De ahí
+el marcador `[C]`.
+
+**Fuentes oficiales y para-oficiales identificadas para que el estudio abra
+primero** (aparecieron en los resultados; **ninguna fue leída**):
+
+- Decreto 484/87 — `trabajo.gba.gov.ar/delegaciones/biblioteca_deles/DN484_1987.pdf` · `argentina.gob.ar/normativa/nacional/decreto-484-1987-77255`
+- Ley 27.423 — `boletinoficial.gob.ar/detalleAviso/primera/176541/20171222` · `consejo.org.ar` (PDF de la ley)
+- Ley 27.802, Modernización Laboral — `boletinoficial.gob.ar/detalleAviso/primera/339128/20260306`
+- Decreto 1558/2001, reglamentario de la Ley 25.326 — `argentina.gob.ar/normativa/nacional/decreto-1558-2001-70368/actualizacion`
+- CSJN, "Catania, Américo Marcial c/ BCRA s/ habeas data", 08/11/2011 — ficha en `saij.gob.ar`; Dossier "Habeas Data" de SAIJ
+- BCRA, texto ordenado "Depósitos de ahorro, cuenta sueldo y especiales" — `bcra.gob.ar/archivos/Pdfs/texord/t-depaho.pdf`
+- BCRA, Régimen Informativo de Deudores del Sistema Financiero — `bcra.gob.ar` (Comunicaciones "A" 3119, 4765, 8045)
+- Ley 25.326, texto actualizado — `hcdn.gob.ar` (PDF de la Dirección de Información Parlamentaria) · `argentina.gob.ar/normativa/nacional/64790/actualizacion`
+- Ley 23.187 — `argentina.gob.ar/normativa/nacional/ley-23187-26188` · `cpacf.org.ar/noticia/5140/ley-23187`
+
+`[I]` **Nada de esta ronda descarga la condición C-03.** Transcribir, interpretar y
+ratificar son tres operaciones distintas; sólo se intentó la primera, y con un
+canal que no alcanza para citar.
 
 ---
 
