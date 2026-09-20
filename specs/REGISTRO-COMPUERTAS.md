@@ -19,6 +19,8 @@ referencia a la anterior.
 | 011 | 2026-09-20 | G1 | 001-fundaciones | Decisión **001-A** — destino del andamiaje preexistente | **DECIDIDO: opción A** | Javier Schenone | Se conserva como propuesta. El `arquitecto` lo audita en G2 y lo ratifica o lo corrige con fundamento. Nada entra al proyecto sin pasar por una compuerta. |
 | 012 | 2026-09-20 | **G1** | 001-fundaciones | `spec.md` — 11 criterios de aceptación, 5 reglas. | **APROBADA** | Javier Schenone | Avanza a G2. |
 | 013 | 2026-09-20 | G2 | 001 y 004 | Convocatoria de `arquitecto` (plan y ADRs de ambas features), `database-engineer` (modelo de datos de 004) y `ux-expert` (diseño de 004) | **EN CURSO** | — | Rangos de ADR asignados para evitar colisión: 001 → ADR-001..009, 004 → ADR-010..019. |
+| 014 | 2026-09-20 | — | — | Caída de los cuatro agentes de G2 por límite de sesión | **REGISTRADO** | — | Se rescataron 4 archivos completos (ADR-005, ADR-006, el contrato del motor y los tokens de diseño). Faltan ambos `plan.md`, 17 ADRs, `modelo-datos.md`, `ux.md` y `sistema-de-diseno.md`. G2 sigue abierta y los agentes deben relanzarse. |
+| 015 | 2026-09-20 | — | — | Regla de precedencia de plugins en `CLAUDE.md` §6 | **DECIDIDO** | Javier Schenone | Ante la instalación del plugin `ponytail`, que inyecta instrucciones en todos los subagentes. La constitución gana sobre cualquier plugin, y se lista la estructura que **no** se simplifica por parecer sobreingeniería cuando en realidad es requisito normativo. Auditoría previa del plugin: sin red, sin ejecución de procesos, sin telemetría. |
 
 ## Leyenda
 
