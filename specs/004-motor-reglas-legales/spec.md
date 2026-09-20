@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 | --- | --- |
-| Versión | **2** — incorpora el dictamen de cumplimiento y las seis decisiones de G1 |
+| Versión | **3** — incorpora los hallazgos de la verificación documental (0 de 12 en fuente oficial, 3 hallazgos que obligan a corregir el QUÉ) |
 | Estado | EN REVISIÓN (G1) |
 | Autor | orquestador |
 | Revisor legal | `compliance-legal` → `specs/004-motor-reglas-legales/cumplimiento.md` (APTO CON CONDICIONES, 12 condiciones) |
@@ -30,6 +30,24 @@ decisiones humanas registradas en `REGISTRO-COMPUERTAS.md` (entradas 004 a 008).
 | Condición C-11 | El impacto estimado por el motor nunca alimenta el cálculo de comisión (CA-61). |
 | Condición C-12 | Regla de no-confusión entre prescripción y caducidad del archivo (CA-62). |
 | Defectos D-11 a D-25 | Corregidos en los criterios indicados en cada caso. |
+
+## 0bis. Cambios de la versión 3
+
+La verificación documental (`specs/legal/verificacion-documental.md`) no pudo
+confirmar ningún texto en fuente oficial — el egreso HTTP del entorno estaba
+bloqueado — pero corroboró por buscador tres hallazgos que cambian el QUÉ de
+esta spec, no sólo sus parámetros, y por eso se corrigen acá antes de G2.
+
+| Hallazgo | Cambio |
+| --- | --- |
+| La Ley 27.423 art. 6 inc. c) podría ser una **prohibición** de pacto de cuota litis en materias previsionales, alimentarias y con menores, no un tope del 20% | CA-63 (nueva): el análisis E no evalúa esas materias, devuelve INDETERMINABLE |
+| La Ley 24.241 art. 14 inc. c) haría **inembargables** las prestaciones previsionales, salvo alimentos y litisexpensas — no es una escala distinta, es otra protección | CA-41 (corregida): inembargabilidad como regla, no "otro régimen a parametrizar" |
+| La Ley 27.802 (BO 06/03/2026) modificó el art. 277 LCT; hay derecho transitorio en disputa que CA-29 (parámetro vigente a la fecha del hecho) no alcanza a resolver | CA-64 (nueva): el motor no resuelve solo, devuelve INDETERMINABLE |
+
+Todo esto está corroborado por buscador, no leído en fuente oficial. Se trata
+como `[C]` en el dictamen de cumplimiento: mismo nivel de exigencia que `[P]`
+a efectos del bloqueo de producción (condición C-02). **No cambia el veredicto
+ni las 12 condiciones**, que siguen intactas.
 
 ## 1. Problema
 
@@ -286,11 +304,16 @@ CA-40  Dado un embargo cuya causa es una obligación alimentaria
        [Defecto D-17: con los topes generales el motor reportaría un exceso
         falso sobre un embargo legítimo]
 
-CA-41  Dado un ingreso que es haber previsional y no remuneración
+CA-41  Dado un ingreso que es haber previsional o prestación de la          [v3]
+       seguridad social
        Cuando se calcula el monto embargable
-       Entonces aplica el régimen de embargabilidad propio de los haberes
-       previsionales, y si no está parametrizado devuelve INDETERMINABLE
-       [Defecto D-19: parte sustancial de la audiencia cobra jubilación]
+       Entonces devuelve INEMBARGABLE por regla
+       Salvo que la afectación tenga por causa alimentos o litisexpensas, en
+       cuyo caso aplica el régimen propio de esa causa (ver CA-40)
+       [Defecto D-19, corregido: la Ley 24.241 art. 14 inc. c) prevé
+        inembargabilidad, no una escala distinta de porcentajes. Aplicarle el
+        Decreto 484/87 a un haber previsional le ocultaría un derecho al
+        titular — constitución #8. Corroborado por buscador, ver §0bis]
 
 CA-42  Dada una indemnización de origen laboral
        Cuando se evalúa una afectación sobre ella
@@ -327,6 +350,28 @@ CA-44  Dada la combinación de honorario del abogado y comisión de plataforma
        respete su tope individual
        [Regla de protección del cliente acordada junto con la decisión de
         topes separados — constitución #1]
+
+CA-63  Dado un caso cuya materia es previsional, alimentaria, o involucra      [v3]
+       derechos de personas menores de edad
+       Cuando se evalúa el análisis E
+       Entonces el análisis NO se evalúa: devuelve INDETERMINABLE con el
+       fundamento de que la Ley 27.423 art. 6 inc. c) podría constituir una
+       prohibición del pacto de cuota litis en esa materia, y no un tope
+       Y en ningún caso se aplica CA-23 ni CA-44 sobre esas materias hasta
+       que el estudio jurídico dictamine
+       [Hallazgo de la verificación documental, ver §0bis]
+
+CA-64  Dada una indemnización u obligación regida por el artículo 277 de la    [v3]
+       Ley de Contrato de Trabajo, modificado por la Ley 27.802
+       Cuando el hecho a evaluar cae en el período de transición entre el
+       régimen anterior y el vigente
+       Entonces el motor NO resuelve con el mecanismo simple de CA-29: 
+       devuelve INDETERMINABLE señalando que existe derecho transitorio en
+       disputa, hasta que el parámetro de transición esté cargado y
+       ratificado
+       [Hallazgo de la verificación documental, ver §0bis. El mecanismo de
+        "parámetro vigente a la fecha del hecho" no alcanza cuando hay
+        controversia sobre qué régimen rige el período de cambio]
 
 CA-24  Dado un caso de materia laboral
        Entonces se aplica el límite diferenciado de esa materia, no el general
