@@ -179,6 +179,43 @@ Un agente que encuentre sobreingeniería genuina fuera de esa lista **la reporta
 igual**: la simplificación es bienvenida, pero se decide en la compuerta que
 corresponda, no en medio de una tarea.
 
+### Herramientas de la etapa de desarrollo
+
+Herramientas que usamos **para construir** el producto. No forman parte de lo
+que se entrega.
+
+| Herramienta | Para qué | Cómo se instala |
+| --- | --- | --- |
+| `ponytail` | Modo "senior vago": fuerza la solución más simple que funcione. Se aplica a la sesión principal y a todos los agentes. | `/plugin marketplace add DietrichGebert/ponytail` y `/plugin install ponytail@ponytail` |
+| `graphify` | Convierte el repositorio en un grafo de conocimiento consultable, en vez de grepear. El código se parsea local con tree-sitter; docs y PDF pasan por un modelo. | `uv tool install graphifyy` y `graphify install` |
+| `OmniRoute` | Pasarela local de IA: un solo endpoint con enrutamiento, fallback entre proveedores y compresión de contexto para no chocar contra los límites de uso durante el desarrollo. | `npm install -g omniroute`; queda escuchando en `http://localhost:20128`, y las herramientas apuntan a `http://localhost:20128/v1` |
+
+#### Frontera de OmniRoute — no negociable
+
+OmniRoute es **infraestructura de desarrollo**, decidida por el product owner el
+2026-09-20 (registro de compuertas, entrada 016). De eso se derivan cuatro
+límites:
+
+1. **No es componente del producto.** No aparece en ninguna spec, no se
+   despliega a ningún entorno, ninguna feature depende de él, y no se agrega
+   como dependencia de ningún paquete del workspace.
+2. **No toca datos de clientes.** El producto en ejecución nunca enruta por
+   OmniRoute. Si alguna vez se propusiera usarlo dentro del producto, eso
+   **vuelve a compuerta** y requiere dictamen específico de `compliance-legal`:
+   sería tratamiento de datos patrimoniales por terceros y necesita base legal,
+   encargado de tratamiento identificado y acuerdo firmado.
+3. **Regla operativa, la que importa en la práctica.** Con la pasarela activa,
+   nunca se pega en una sesión de desarrollo el CUIL, el informe crediticio ni
+   el expediente de un cliente real para depurar. Si hay que reproducir un caso
+   real, se anonimiza primero. Así es como un dato real se escapa de verdad: no
+   por diseño, por apuro.
+4. **El repositorio no depende de que esté instalado.** Todo —compilar, testear,
+   levantar el sistema— tiene que funcionar sin OmniRoute. Es una comodidad del
+   desarrollador, no un requisito del proyecto (criterio CA-01 y CA-11 de la
+   spec 001).
+
+Instalarla y mantenerla en los entornos de desarrollo es del agente `cicd`.
+
 ## 7. Estado actual
 
 Fase: **ciclo 001 + 004, compuerta G1.**
