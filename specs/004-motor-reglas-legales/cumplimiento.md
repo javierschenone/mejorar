@@ -6,8 +6,9 @@
 | Spec de origen | `specs/004-motor-reglas-legales/spec.md` |
 | Compuerta | G1 |
 | Fecha de la revisión | 2026-09-20 |
+| Ronda de verificación documental | 2026-09-20 — registro en `specs/legal/verificacion-documental.md` |
 | Estado | BORRADOR — pendiente de aprobación humana en G1 |
-| **Veredicto** | **APTO CON CONDICIONES** (12 condiciones verificables, §6) |
+| **Veredicto** | **APTO CON CONDICIONES** (12 condiciones verificables, §6) — **sin cambios tras la ronda de verificación** |
 
 ---
 
@@ -27,6 +28,17 @@
 > durante esta revisión (el sitio de InfoLeg estuvo inaccesible desde este entorno).
 > Esos puntos están marcados y **hay que verificarlos en el boletín oficial antes de
 > usarlos**. Ver §8.
+>
+> **Ronda de verificación documental del 2026-09-20.** Se intentó verificar los doce
+> puntos del §8 en fuentes oficiales alternativas. **Ninguna fuente oficial pudo
+> abrirse**: en esta sesión la política de egreso de red bloqueó todos los destinos
+> web, incluidos SAIJ, Boletín Oficial, argentina.gob.ar, bcra.gob.ar y cij.gov.ar.
+> El único canal disponible fue un **buscador**, que devuelve transcripciones
+> atribuidas a fuentes oficiales pero no permite confirmar su fidelidad ni su
+> vigencia. Por eso **ningún punto pasó a `[V]`** y se incorporó el marcador `[C]`.
+> El registro completo —qué se buscó, con qué resultado, qué falló y por qué— está
+> en **`specs/legal/verificacion-documental.md`**, que es el documento que debe
+> recibir el estudio jurídico.
 
 ### Leyenda de confiabilidad
 
@@ -36,9 +48,16 @@ afirmación no lo lleva, es un defecto de este documento y hay que reclamarlo.
 | Marca | Significado |
 | --- | --- |
 | `[V]` | Verificada durante esta revisión contra una fuente oficial en línea (argentina.gob.ar / SAIJ). Igual **requiere ratificación profesional**: verificar el texto no equivale a interpretarlo. |
+| `[C]` | **Corroborada por buscador, sin lectura de la fuente oficial** (ronda del 2026-09-20). Transcripción coincidente entre dos o más fuentes independientes. **Vale para orientar al estudio; no vale para citar en un documento que salga al cliente o a un juzgado, ni para evaluar en producción.** A los efectos del bloqueo de la condición C-02, `[C]` se trata **igual que `[P]`**. |
 | `[P]` | **Pendiente de verificación documental.** Proviene del conocimiento del revisor y **no** pudo contrastarse con el texto oficial. Tratar como hipótesis, no como dato. |
 | `[D]` | **A DETERMINAR POR EL ESTUDIO.** El revisor no propone valor porque no tiene base suficiente y un número equivocado acá se propaga a toda la cartera. |
+| `[!]` | **Contradicción abierta.** Dos fuentes dicen cosas distintas y el revisor no eligió entre ellas. **El motor no debe evaluar sobre este parámetro** hasta que el estudio lo resuelva. |
 | `[I]` | Interpretación o criterio, no texto legal. Opinión del revisor sujeta a corrección. |
+
+> **`[C]` no es un ascenso de `[P]`.** Es la misma incertidumbre jurídica con mejor
+> punto de partida documental. La distinción importa: **verificar el texto de una
+> norma no equivale a la ratificación profesional que exige la condición C-03**, y
+> corroborarlo por buscador está todavía un escalón por debajo de verificarlo.
 
 ---
 
@@ -561,21 +580,29 @@ nadie lo vuelve a mirar.
 Todos los parámetros llevan además `vigenciaDesde` / `vigenciaHasta` y la cita
 normativa, conforme R-02 y CA-29.
 
+> **Sobre los valores marcados `[C]` (ronda del 2026-09-20).** Se completaron a
+> partir de transcripciones obtenidas por buscador, con la URL y la fecha de
+> consulta. **Las columnas "Validado por" y "Fecha" siguen vacías en el 100% de las
+> filas, y así deben quedar.** Corroborar un texto **no es** ratificarlo: la
+> condición **C-03 sigue íntegramente incumplida** y ningún valor `[C]` habilita una
+> evaluación en producción. Trazabilidad completa en
+> `specs/legal/verificacion-documental.md`.
+
 ### 5.A — Prescripción liberatoria
 
 | Parámetro | Qué representa | Norma que lo funda | Valor propuesto | Validado por | Fecha |
 | --- | --- | --- | --- | --- | --- |
-| `prescripcion.plazoGenerico` | Plazo de prescripción aplicable cuando ninguna norma especial fija otro. | CCyC art. 2560 `[P]` | **5 años** `[P]` — verificar texto oficial | | |
-| `prescripcion.plazoPeriodico` | Plazo para el reclamo de lo que se devenga por años o plazos periódicos más cortos. | CCyC art. 2562 `[P]` | **2 años** `[P]` — **y `[D]` si aplica a cuotas de un préstamo**: el propio artículo excluiría el reintegro de un capital en cuotas. Esta distinción decide el resultado en la mayoría de los préstamos personales de la cartera. | | |
-| `prescripcion.plazoTarjetaEjecutiva` | Plazo de la acción ejecutiva emergente de la relación emisor–titular. | Ley 25.065 art. 47 `[P]` | **1 año** `[P]` — **requiere verificación documental**, no se pudo leer el texto del artículo | | |
-| `prescripcion.plazoTarjetaOrdinaria` | Plazo de las acciones ordinarias de la ley de tarjetas. | Ley 25.065 art. 47 `[P]` | **3 años** `[P]` — **requiere verificación documental** | | |
+| `prescripcion.plazoGenerico` | Plazo de prescripción aplicable cuando ninguna norma especial fija otro. | CCyC art. 2560 `[C]` | **5 años** `[C]` — texto corroborado 2026-09-20: *"El plazo de la prescripción es de cinco años, excepto que esté previsto uno diferente en la legislación local."* `[I]` La salvedad final ("legislación local") **no estaba contemplada en la spec** y es relevante para la decisión 004-D. | | |
+| `prescripcion.plazoPeriodico` | Plazo para el reclamo de lo que se devenga por años o plazos periódicos más cortos. | CCyC art. 2562 inc. c `[C]` | **2 años** `[C]` — corroborado 2026-09-20 el inc. c: *"el reclamo de todo lo que se devenga por años o plazos periódicos más cortos"*. **Sigue `[D]` si aplica a las cuotas de un préstamo personal**: ninguna fuente consultada resolvió si el reintegro de un capital fraccionado en cuotas queda dentro o fuera. Esta distinción decide el resultado en la mayoría de los préstamos personales de la cartera. | | |
+| `prescripcion.plazoTarjetaEjecutiva` | Plazo de la acción ejecutiva emergente de la relación emisor–titular. | Ley 25.065 art. 47 inc. a `[C]` | **1 año** `[C]` — corroborado 2026-09-20: *"Las acciones de esta ley prescriben: a) Al año, la acción ejecutiva."* `[D]` **Desde cuándo corre: sin determinar.** | | |
+| `prescripcion.plazoTarjetaOrdinaria` | Plazo de las acciones ordinarias de la ley de tarjetas. | Ley 25.065 art. 47 inc. b `[C]` | **3 años** `[C]` — corroborado 2026-09-20: *"b) A los tres (3) años, las acciones ordinarias."* `[D]` **Desde cuándo corre: sin determinar.** | | |
 | `prescripcion.plazoAccionCambiaria` | Plazo de la acción cambiaria directa (pagaré, letra), muy frecuente en cobranzas. | Dto. Ley 5965/63 `[P]` | `A DETERMINAR POR EL ESTUDIO` | | |
 | `prescripcion.plazoSaldoCuentaCorriente` | Plazo del saldo deudor de cuenta corriente bancaria. | `[D]` | `A DETERMINAR POR EL ESTUDIO` | | |
 | `prescripcion.plazoRelacionConsumo` | Si existe un plazo propio para la relación de consumo que desplace al general. | Ley 24.240 y su articulación con el CCyC `[P]` | `A DETERMINAR POR EL ESTUDIO` — punto **doctrinariamente discutido**; el motor necesita una regla de desempate escrita, no un criterio implícito | | |
 | `prescripcion.reglaDiesAQuo` | Desde qué hecho exacto empieza a correr el plazo: exigibilidad de cada cuota, caducidad de plazos, mora automática, o interpelación. | CCyC art. 2554 `[P]` | `A DETERMINAR POR EL ESTUDIO` — **crítico**: en una deuda con caducidad de plazos anticipada la fecha cambia por años | | |
 | `prescripcion.reglaTransicionCCyC` | Cómo se computan las obligaciones nacidas bajo el Código Civil derogado, con plazos distintos. | CCyC art. 2537; Ley 26.994 `[P]` | `A DETERMINAR POR EL ESTUDIO` — afecta a toda deuda anterior a agosto de 2015, que es buena parte de las "deudas viejas" del producto | | |
 | `prescripcion.hechosInterruptivos` | Catálogo cerrado de hechos que reinician el cómputo. | CCyC arts. 2544 a 2548 `[P]` | **Reconocimiento expreso o tácito del deudor** (incluido el pago parcial) `[P]`; **petición judicial notificada** `[P]`; **solicitud de arbitraje** `[P]`. **Efecto: nuevo plazo íntegro desde el hecho** `[P]`. La spec (CA-04) además menciona "demanda judicial notificada", coherente. | | |
-| `prescripcion.hechosSuspensivos` | Catálogo cerrado de hechos que detienen el cómputo sin borrar lo corrido. | CCyC arts. 2539 a 2543 `[P]` | **Interpelación fehaciente** `[P]`: suspende **6 meses** `[P]` y **por una sola vez** `[P]`. **Pedido de mediación** `[P]`: suspende, con reanudación a partir del cierre; **la duración exacta y su cómputo son `[D]`**. Casos especiales del art. 2543 `[D]`. | | |
+| `prescripcion.hechosSuspensivos` | Catálogo cerrado de hechos que detienen el cómputo sin borrar lo corrido. | CCyC arts. 2539 a 2543; art. 2541 `[C]`; art. 2542 `[C]` | **Interpelación fehaciente** (art. 2541) `[C]`, texto corroborado 2026-09-20: *"El curso de la prescripción se suspende, **por una sola vez**, por la interpelación fehaciente hecha por el titular del derecho contra el deudor o el poseedor. Esta suspensión sólo tiene efecto durante **seis meses o el plazo menor que corresponda a la prescripción de la acción**."* `[I]` **Dos reglas, no una**: el límite de una sola vez (defecto D-11) **y** el tope alternativo "el plazo menor que corresponda", que la spec no contempla y el motor tiene que calcular. **Pedido de mediación** (art. 2542) `[C]`: suspende *"desde la expedición por medio fehaciente de la comunicación de la fecha de la audiencia de mediación o desde su celebración, lo que ocurra primero"*; **la reanudación y su cómputo siguen `[D]`**. Casos especiales del art. 2543 `[D]`. | | |
 | `prescripcion.duracionEfectoPeticionJudicial` | Cuánto dura el efecto interruptivo de la petición judicial. | CCyC art. 2547 `[P]` | `A DETERMINAR POR EL ESTUDIO` — depende de desistimiento, caducidad de instancia y sentencia | | |
 | `prescripcion.oportunidadProcesalOposicion` | Hasta cuándo puede oponerse la defensa en el proceso. | CCyC art. 2553 `[P]` y códigos procesales locales | `A DETERMINAR POR EL ESTUDIO` — **varía por jurisdicción y por tipo de proceso** | | |
 | `prescripcion.umbralAlertaDias` | Antelación con que se avisa PROXIMA_A_PRESCRIBIR (CA-03). | Parámetro de producto, no normativo `[I]` | **180 días** `[I]` — propuesta del revisor; requiere criterio profesional sobre si 6 meses alcanzan para articular la defensa | | |
@@ -584,15 +611,16 @@ normativa, conforme R-02 y CA-29.
 
 | Parámetro | Qué representa | Norma que lo funda | Valor propuesto | Validado por | Fecha |
 | --- | --- | --- | --- | --- | --- |
-| `intereses.relacionMaxPunitorioSobreCompensatorio.general` | Relación máxima admitida entre la tasa punitoria y la compensatoria, fuera del régimen de tarjetas. | **No se identificó tope legal general.** Control judicial: CCyC art. 771 `[P]`. Normativa BCRA para entidades financieras `[D]`. | `A DETERMINAR POR EL ESTUDIO`. `[I]` El revisor **se niega a proponer un número**: el 50% del régimen de tarjetas es tentador por analogía, pero **una analogía no es un tope legal** y cargarla equivaldría a inventar una norma. Si el estudio decide usar un umbral, debe quedar rotulado como **umbral de alerta interno**, no como tope legal. | | |
+| `intereses.relacionMaxPunitorioSobreCompensatorio.general` | Relación máxima admitida entre la tasa punitoria y la compensatoria, fuera del régimen de tarjetas. | **No se identificó tope legal general.** Control judicial: CCyC art. 771 `[C]` — texto corroborado 2026-09-20: *"Los jueces **pueden reducir** los intereses cuando la tasa fijada o el resultado que provoque la capitalización de intereses excede, **sin justificación y desproporcionadamente**, el costo medio del dinero para deudores y operaciones similares en el lugar donde se contrajo la obligación. Los intereses pagados en exceso se imputan al capital y, una vez extinguido éste, pueden ser repetidos."* `[I]` **Confirma la condición C-04**: es una facultad judicial de reducción, no un tope automático. Normativa BCRA para entidades financieras `[D]`. | `A DETERMINAR POR EL ESTUDIO`. `[I]` El revisor **se niega a proponer un número**: el 50% del régimen de tarjetas es tentador por analogía, pero **una analogía no es un tope legal** y cargarla equivaldría a inventar una norma. Si el estudio decide usar un umbral, debe quedar rotulado como **umbral de alerta interno**, no como tope legal. | | |
 | `intereses.topeCompensatorio.tarjeta.emisorBancario` | Tope del interés compensatorio o financiero cuando el emisor es una entidad bancaria. | Ley 25.065 art. 16, 1er párrafo `[V]` | **25% por encima de la tasa que el propio emisor aplica a préstamos personales en moneda corriente para clientes** `[V]`. `[I]` **Obliga a obtener la tasa del emisor**, dato que el motor probablemente no tenga: prever INDETERMINABLE. | | |
 | `intereses.topeCompensatorio.tarjeta.emisorNoBancario` | Tope del compensatorio cuando el emisor no es banco. | Ley 25.065 art. 16, 2do párrafo `[V]` | **25% por encima del promedio de tasas del sistema para préstamos personales publicado por el BCRA del día 1 al 5 de cada mes** `[V]`. Requiere la **serie histórica** de ese promedio como parámetro con vigencia. | | |
-| `intereses.topePunitorio.tarjeta.hasta_DNU70_2023` | Tope del punitorio en tarjetas, para hechos anteriores al DNU 70/2023. | Ley 25.065 art. 18, texto anterior `[P]` | **50% por encima de la tasa efectivamente aplicada conforme al art. 16** `[P]` — requiere verificación documental del texto derogado y de la **fecha exacta** de corte de vigencia | | |
+| `intereses.topePunitorio.tarjeta.hasta_DNU70_2023` | Tope del punitorio en tarjetas, para hechos anteriores al DNU 70/2023. | Ley 25.065 art. 18, texto anterior `[C]` | **50%** `[C]` — texto anterior corroborado 2026-09-20: *"El límite de los intereses punitorios que el emisor aplique al titular no podrá superar en más del cincuenta por ciento (50%) a la efectivamente aplicada por la institución financiera en concepto de interés compensatorio o financiero. Independientemente de lo dispuesto por las leyes de fondo, los intereses punitorios no serán capitalizables."* `[I]` **Hallazgo de la ronda: la no capitalización ya estaba en el texto original.** El DNU suprimió el primer párrafo y conservó el segundo. **La fecha de corte sigue `[D]`**: ver la fila siguiente. | | |
 | `intereses.topePunitorio.tarjeta.desde_DNU70_2023` | Ídem, para hechos posteriores. | Ley 25.065 art. 18 según art. 20 del DNU 70/2023 `[V]` | `A DETERMINAR POR EL ESTUDIO` — el texto vigente sólo dispone la no capitalización; **hay que dictaminar si subsiste algún tope y con qué fundamento**. Ver §4.4 y C-05. | | |
-| `intereses.punitorioNoCapitalizable.tarjeta` | Prohibición de capitalizar punitorios en tarjetas. | Ley 25.065 art. 18 vigente `[V]` | **true**, desde la entrada en vigor del DNU 70/2023 `[V]` (fecha exacta a verificar) | | |
+| `intereses.punitorioNoCapitalizable.tarjeta` | Prohibición de capitalizar punitorios en tarjetas. | Ley 25.065 art. 18 vigente `[V]` | **true** `[V]`. `[C]` **Corrección de la ronda 2026-09-20: rige desde la sanción original de la Ley 25.065, no desde el DNU.** La cláusula figuraba ya en el texto anterior del art. 18. Eso **simplifica el parámetro**: no necesita doble vigencia. | | |
+| `intereses.fechaCorteDNU70_2023` | Fecha a partir de la cual deja de regir el tope del 50% de punitorios en tarjeta. Decide, deuda por deuda, si hay tope o no lo hay. | DNU 70/2023, disposiciones de vigencia `[D]`; CCyC art. 5 `[P]` | `A DETERMINAR POR EL ESTUDIO`. Corroborado 2026-09-20 sólo lo siguiente: **publicación en el Boletín Oficial el 21/12/2023** `[C]`. Las fuentes consultadas infieren la vigencia el **29/12/2023** aplicando el art. 5 del CCyC (octavo día) por no haber fijado el DNU fecha propia, pero **esa fecha es un razonamiento doctrinario, no un texto normativo, y el artículo de vigencia del DNU no pudo leerse**. **No cargar sobre esta base.** | | |
 | `intereses.improcedenciaPunitorios.tarjeta.pagoMinimo` | No corresponde punitorio si se hizo el pago mínimo del resumen en fecha. | Ley 25.065 art. 19 `[V]` | **true** `[V]`. **No hay CA que lo cubra**: defecto D-14. | | |
-| `intereses.capitalizacion.periodicidadMinimaPactable` | Periodicidad mínima con que una cláusula puede prever la acumulación de intereses al capital. | CCyC art. 770 `[P]` | **6 meses** `[P]` — **requiere verificación documental del texto exacto del art. 770**, incluida la eventual incidencia del DNU 70/2023 sobre el capítulo de obligaciones dinerarias | | |
-| `intereses.capitalizacion.supuestosAdmitidos` | Catálogo cerrado de casos en que la capitalización es admisible. | CCyC art. 770 `[P]` | **Cuatro supuestos** `[P]`: cláusula con periodicidad mínima; obligación demandada judicialmente desde la notificación; liquidación judicial aprobada e impaga; otros supuestos legales. **Texto exacto y alcance: `[D]`.** | | |
+| `intereses.capitalizacion.periodicidadMinimaPactable` | Periodicidad mínima con que una cláusula puede prever la acumulación de intereses al capital. | CCyC art. 770 inc. a `[C]` | **6 meses** `[C]` — corroborado 2026-09-20: *"una cláusula expresa autorice la acumulación de los intereses al capital con una periodicidad **no inferior a seis meses**"*. **Sigue sin verificar** si el DNU 70/2023 alcanzó el capítulo de obligaciones dinerarias del CCyC; ninguna consulta lo aclaró. | | |
+| `intereses.capitalizacion.supuestosAdmitidos` | Catálogo cerrado de casos en que la capitalización es admisible. | CCyC art. 770 `[C]` | **Cuatro supuestos** `[C]`, texto corroborado 2026-09-20: **a)** cláusula expresa con periodicidad no inferior a seis meses; **b)** obligación demandada judicialmente — la acumulación opera **desde la notificación de la demanda**; **c)** obligación liquidada judicialmente — la capitalización se produce **desde que el juez manda pagar la suma resultante y el deudor es moroso en hacerlo**; **d)** otras disposiciones legales que prevean la acumulación. `[I]` Los incisos b) y c) fijan **fechas de inicio distintas** que el motor debe modelar por separado; la spec los trata como un único supuesto. | | |
 | `intereses.normalizacion.basesDeTasa` | Reglas de conversión entre TNA, TEA y tasa mensual antes de comparar contra un tope. | No normativo; criterio financiero `[I]` | `A DETERMINAR` — **no es un problema legal sino actuarial, y la spec lo identifica bien en §7.** Requiere criterio de un contador o actuario, no del estudio jurídico. Comparar una TNA contra un tope expresado en TEA produce hallazgos falsos. | | |
 | `intereses.art36LDC.datosObligatorios` | Datos que el acreedor debió informar en la operación de crédito para consumo. | Ley 24.240 art. 36 `[P]` | **TNA, TEA, costo financiero total, cantidad y periodicidad de cuotas, monto total financiado** `[P]` — verificar la enumeración exacta. Habilita un hallazgo que la spec no contempla (D-15). | | |
 | `intereses.moraAutomatica` | Si la mora es automática o requiere interpelación en la deuda evaluada. | CCyC arts. 886/887 `[P]` | `A DETERMINAR POR EL ESTUDIO` — determina desde cuándo se devengan punitorios | | |
