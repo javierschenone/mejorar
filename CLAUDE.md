@@ -128,7 +128,15 @@ Reglas de la compuerta:
 
 ## 6. Estado actual
 
-Fase: **G0 — definición del proceso y del backlog.**
+Fase: **ciclo 001 + 004, compuerta G1.**
+
+| Compuerta | Estado |
+| --- | --- |
+| G0 — proceso, roster y backlog | **APROBADA** (2026-09-20) |
+| G1 — spec 001 Fundaciones | pendiente: 1 decisión abierta (001-A) |
+| G1 — spec 004 Motor de reglas legales | pendiente: dictamen APTO CON CONDICIONES; 004-B y CA-23 ya decididas; faltan 004-A, 004-C y 004-D |
+
+Modalidad acordada con el product owner: **las seis compuertas, una por una.**
 
 Material preexistente en el repositorio, producido antes de adoptar SDD y por lo
 tanto **sujeto a revisión** en las compuertas correspondientes:
