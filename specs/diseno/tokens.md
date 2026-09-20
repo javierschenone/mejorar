@@ -335,6 +335,6 @@ No son colores pero son tokens: se repiten y no pueden decidirse por pantalla.
 
 | # | Pendiente | Responsable |
 | --- | --- | --- |
-| T-01 | Set de íconos: hay que dibujarlos o elegir una librería de trazos que no incluya martillo de juez, esposas, cadenas, calavera ni pulgar hacia abajo. Ver la lista prohibida en `sistema-de-diseno.md` §6.3. | `ux-expert`, próxima feature con UI |
+| T-01 | Set de íconos. **Especificado**: `sistema-de-diseno.md` §6.3 define el estilo (trazo 1.75px, grilla 24, `currentColor`), el set inicial de 24 trazos, las reglas de uso y la **lista prohibida vinculante** (martillo de juez, esposas, cadenas, calavera, pulgar hacia abajo y 18 figuras más). Queda pendiente **dibujar** los 24 trazos. | `ux-expert`, próxima feature con UI |
 | T-02 | Tokens de gráficos (líneas de tiempo de prescripción para el portal del abogado). No se necesitan en la 004 cliente. | `ux-expert` |
 | T-03 | Validar los tokens con un usuario real con baja visión y con lector de pantalla antes de G5. | `tester` + `ux-expert` |

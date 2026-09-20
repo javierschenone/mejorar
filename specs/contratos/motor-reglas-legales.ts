@@ -4,12 +4,24 @@
  * | Campo | Valor |
  * | --- | --- |
  * | Contrato | `motor-reglas-legales` |
- * | Versión | `1` (`motor-reglas-legales/v1`) |
- * | Spec de origen | `specs/004-motor-reglas-legales/spec.md` (v2, aprobada en G1) |
+ * | Versión | `1` (`motor-reglas-legales/v1`), revisión **2** del documento |
+ * | Spec de origen | `specs/004-motor-reglas-legales/spec.md` (**v3**, 64 criterios) |
  * | Plan | `specs/004-motor-reglas-legales/plan.md` |
  * | Estado | PROPUESTO — pendiente de aprobación humana en G2 |
  * | Autor | `arquitecto` |
  * | Implementa | `dev-dominio` en `packages/shared/src/motor-legal/**` |
+ *
+ * Revisión 2 (spec v3): el identificador de versión del contrato **no** cambia
+ * porque el contrato nunca pasó G2 y por lo tanto no hay consumidor al que
+ * romperle compatibilidad. Los cambios respecto de la revisión 1 son:
+ *
+ * - `Indeterminable` deja de llevar una lista de datos faltantes y pasa a llevar
+ *   una lista de **causas** de tres clases distintas: falta de dato, materia
+ *   excluida por prohibición normativa (CA-63) y régimen transitorio en disputa
+ *   (CA-64). Ver §3 y ADR-019.
+ * - Parámetros nuevos: `cuotaLitis.materiasExcluidas`,
+ *   `cuotaLitis.transicionArt277LCT`, `embargo.excepcionLitisexpensas`.
+ * - `ResultadoAnalisisD` gana el estado `INEMBARGABLE_POR_REGLA` (CA-41).
  *
  * ESTE ARCHIVO ES SÓLO DECLARACIONES. No contiene ni una implementación.
  *
@@ -260,15 +272,84 @@ export interface DatoFaltante {
 }
 
 /**
- * INDETERMINABLE. Resultado de primera clase, no un error ni un caso vacío
- * (CA-07, CA-13, CA-26, CA-35, CA-39, CA-40, CA-41, CA-52).
+ * CA-63. Una materia **excluida** no es un dato que falte: es una materia sobre
+ * la que el motor **no debe evaluar**, porque la norma podría prohibir el acto
+ * que se le pide valorar (pacto de cuota litis en materias previsionales,
+ * alimentarias o con intervención de personas menores de edad).
  *
- * Invariante: `faltantes.length >= 1`. Un INDETERMINABLE que no nombra qué
- * falta es un defecto y lo verifica un test.
+ * La distinción es operativa, no decorativa: un dato faltante se resuelve
+ * consiguiendo el dato; una materia excluida **no se resuelve con más datos**,
+ * sólo con el dictamen del estudio jurídico. Ver ADR-019.
+ */
+export type ClaseExclusionNormativa =
+  /** El estudio dictaminó que hay prohibición. El motor nunca evalúa. */
+  | 'PROHIBICION_NORMATIVA_VIGENTE'
+  /** Fuentes contradictorias sobre si es prohibición o tope (dictamen §5.E). */
+  | 'PROHIBICION_EN_DISPUTA';
+
+export interface MateriaExcluida {
+  readonly analisis: Analisis;
+  readonly materia: MateriaDelCaso;
+  /** `true` cuando la exclusión se dispara por intervención de persona menor. */
+  readonly porIntervencionDePersonaMenorDeEdad: boolean;
+  readonly claseExclusion: ClaseExclusionNormativa;
+  readonly parametro: ClaveParametro;
+  readonly fundamento: readonly CitaNormativa[];
+}
+
+/**
+ * CA-64. Régimen transitorio en disputa. Tampoco es un dato faltante: el dato
+ * está, el parámetro puede estar cargado, y sin embargo **no se sabe cuál de
+ * dos regímenes rige el hecho**, porque la controversia es sobre la aplicación
+ * temporal de la norma y no sobre su contenido.
+ *
+ * El mecanismo de CA-29 —parámetro vigente a la fecha del hecho— resuelve
+ * sucesión de normas, no controversia sobre la sucesión. Ver ADR-019.
+ */
+export type IdRegimenEnDisputa =
+  | 'ART_277_LCT_TEXTO_ANTERIOR'
+  | 'ART_277_LCT_SEGUN_LEY_27802';
+
+export interface RegimenEnDisputa {
+  readonly analisis: Analisis;
+  readonly parametroDeTransicion: ClaveParametro;
+  readonly regimenesEnConflicto: readonly IdRegimenEnDisputa[];
+  readonly fechaDelHechoEvaluada: FechaDelHecho;
+  readonly fundamento: readonly CitaNormativa[];
+}
+
+/**
+ * Las tres —y únicas tres— razones por las que el motor puede no dar un
+ * resultado sin que eso sea un error (ADR-012 y ADR-019).
+ */
+export type CausaDeIndeterminacion =
+  | { readonly clase: 'FALTA_DE_DATO'; readonly dato: DatoFaltante }
+  | { readonly clase: 'MATERIA_EXCLUIDA'; readonly exclusion: MateriaExcluida }
+  | { readonly clase: 'REGIMEN_EN_DISPUTA'; readonly disputa: RegimenEnDisputa };
+
+export type ClaseIndeterminacion = CausaDeIndeterminacion['clase'];
+
+/**
+ * INDETERMINABLE. Resultado de primera clase, no un error ni un caso vacío
+ * (CA-07, CA-13, CA-26, CA-35, CA-39, CA-40, CA-41, CA-52, CA-63, CA-64).
+ *
+ * Invariantes, verificados por test:
+ *
+ * 1. `causas.length >= 1`. Un INDETERMINABLE que no dice por qué es un defecto.
+ * 2. `clase` es la clase de la **causa dominante**, y la dominancia sigue este
+ *    orden estricto: `MATERIA_EXCLUIDA` > `REGIMEN_EN_DISPUTA` > `FALTA_DE_DATO`.
+ *    El orden no es arbitrario: si la materia está excluida, pedirle al cliente
+ *    el dato que falta sería pedirle que complete un trámite que quizá no
+ *    corresponde hacer.
+ * 3. `plantilla` se corresponde con `clase`: `RESULTADO_INDETERMINABLE` para
+ *    falta de dato, `RESULTADO_INDETERMINABLE_MATERIA_EXCLUIDA` y
+ *    `RESULTADO_INDETERMINABLE_REGIMEN_EN_DISPUTA` para las otras dos. Nunca se
+ *    le dice a un cliente "nos falta un dato" cuando el problema es otro.
  */
 export interface Indeterminable {
   readonly estado: 'INDETERMINABLE';
-  readonly faltantes: readonly DatoFaltante[];
+  readonly clase: ClaseIndeterminacion;
+  readonly causas: readonly CausaDeIndeterminacion[];
   readonly plantilla: ReferenciaPlantilla;
   readonly accionesSugeridas: readonly AccionSugerida[];
   readonly trazabilidad: Trazabilidad;
@@ -407,14 +488,18 @@ export type ClaveParametro =
   | 'embargo.baseDeCalculo'
   | 'embargo.tratamientoSAC'
   | 'embargo.excepcionAlimentos'
+  | 'embargo.excepcionLitisexpensas'
   | 'embargo.haberesPrevisionales'
   | 'embargo.indemnizacionesLaborales'
   | 'embargo.cuentaSueldo.intangibilidad'
   // E — honorarios
   | 'cuotaLitis.topeGeneral'
   | 'cuotaLitis.topeAmpliado.conAsuncionDeCostas'
-  | 'cuotaLitis.topeMateriasProtegidas'
+  /** CA-63. Materias sobre las que el análisis E no evalúa. No es un tope. */
+  | 'cuotaLitis.materiasExcluidas'
   | 'cuotaLitis.topeLaboral'
+  /** CA-64. Derecho transitorio del art. 277 LCT tras la Ley 27.802. */
+  | 'cuotaLitis.transicionArt277LCT'
   | 'cuotaLitis.baseDeCalculo'
   | 'comision.topeContractualPlataforma'
   | 'comision.compromisoInternoSumaSobreBeneficioNeto'
@@ -438,6 +523,43 @@ export type ValorParametro =
   | { readonly clase: 'BASE_TOPE_TARJETA'; readonly base: BaseTopeTarjeta }
   | { readonly clase: 'CONVENCION_FINANCIERA'; readonly convencion: ConvencionFinanciera }
   | { readonly clase: 'LISTA_DATOS_OBLIGATORIOS'; readonly datos: readonly DatoPrecontractual[] }
+  /**
+   * CA-41. Un régimen de protección **no** es una escala de porcentajes con
+   * otros números: es otra cosa. El tipo lo hace explícito para que nadie
+   * modele un haber previsional como un tramo del Decreto 484/87.
+   */
+  | {
+      readonly clase: 'REGIMEN_DE_PROTECCION_DEL_INGRESO';
+      readonly proteccion: 'INEMBARGABLE_POR_REGLA' | 'EMBARGABLE_SEGUN_ESCALA';
+      /** Causas que desplazan la protección y activan su propio régimen. */
+      readonly causasExceptuadas: readonly CausaAfectacion[];
+    }
+  /**
+   * CA-63. Exclusión de materias. Se carga con
+   * `claseExclusion: 'PROHIBICION_EN_DISPUTA'` mientras el estudio no dictamine,
+   * y eso **ya basta** para que el análisis no evalúe: excluir es la dirección
+   * segura y por eso no exige ratificación previa (ADR-019).
+   */
+  | {
+      readonly clase: 'MATERIAS_EXCLUIDAS';
+      readonly materias: readonly MateriaDelCaso[];
+      readonly excluyeSiIntervienePersonaMenorDeEdad: boolean;
+      readonly claseExclusion: ClaseExclusionNormativa;
+    }
+  /**
+   * CA-64. Regla de derecho transitorio. `estado: 'EN_DISPUTA'` produce
+   * INDETERMINABLE de clase `REGIMEN_EN_DISPUTA` para todo hecho que caiga en
+   * la ventana, aunque el resto de los parámetros estén ratificados.
+   */
+  | {
+      readonly clase: 'REGLA_DE_TRANSICION';
+      readonly estado: 'EN_DISPUTA' | 'RESUELTA';
+      readonly ventanaDesde: FechaCivil;
+      readonly ventanaHasta: FechaCivil | null;
+      readonly regimenesEnConflicto: readonly IdRegimenEnDisputa[];
+      /** Sólo cuando `estado` es `'RESUELTA'`. */
+      readonly regimenQueRige: IdRegimenEnDisputa | null;
+    }
   | { readonly clase: 'NO_DETERMINADO' };
 
 export type HechoDiesAQuo =
@@ -520,9 +642,14 @@ export interface TramoParametro {
 export type ClaveNotaDeAlcance =
   | 'TEXTO_SUSTITUIDO_POR_DNU_70_2023'
   | 'PENDIENTE_VERIFICACION_DOCUMENTAL'
+  | 'CORROBORADO_POR_BUSCADOR_SIN_FUENTE_OFICIAL'
   | 'UMBRAL_DE_ALERTA_INTERNO_NO_TOPE_LEGAL'
   | 'CRITERIO_JURISPRUDENCIAL_NO_LEGAL'
-  | 'PARAMETRO_DE_PRODUCTO_NO_NORMATIVO';
+  | 'PARAMETRO_DE_PRODUCTO_NO_NORMATIVO'
+  /** CA-63: fuentes discrepan entre tope y prohibición (dictamen §5.E). */
+  | 'PROHIBICION_O_TOPE_EN_DISPUTA'
+  /** CA-64: controversia sobre la aplicación temporal, no sobre el texto. */
+  | 'DERECHO_TRANSITORIO_EN_DISPUTA';
 
 export type VersionCatalogo = string & { readonly [marcaIdOpaco]: 'version-catalogo' };
 
@@ -681,12 +808,16 @@ export type IdPlantilla =
   | 'D_EXCESO_DE_EMBARGO'
   | 'D_CUENTA_SUELDO_INTANGIBLE'
   | 'D_INEMBARGABILIDAD_TOTAL'
+  | 'D_HABER_PREVISIONAL_INEMBARGABLE'
   | 'D_INDEMNIZACION_LABORAL'
   | 'D_ADVERTENCIA_CAUSA_ALIMENTARIA'
   | 'E_TOPE_HONORARIO_ABOGADO'
   | 'E_TOPE_COMISION_PLATAFORMA'
   | 'E_ALERTA_COMPROMISO_INTERNO'
+  | 'E_MATERIA_EXCLUIDA_DE_PACTO_DE_CUOTA_LITIS'
   | 'RESULTADO_INDETERMINABLE'
+  | 'RESULTADO_INDETERMINABLE_MATERIA_EXCLUIDA'
+  | 'RESULTADO_INDETERMINABLE_REGIMEN_EN_DISPUTA'
   | 'PARAMETRO_SIN_RATIFICACION_PROFESIONAL'
   | 'NO_CONFUSION_PRESCRIPCION_Y_ARCHIVO'
   | 'ACCION_CLIENTE_CONSULTAR_ABOGADO'
@@ -716,9 +847,11 @@ export type ClaveTerminoControlado =
   | 'HECHO_RECONOCIMIENTO' | 'HECHO_PAGO_PARCIAL' | 'HECHO_DEMANDA_NOTIFICADA'
   | 'HECHO_SOLICITUD_ARBITRAJE' | 'HECHO_INTERPELACION' | 'HECHO_MEDIACION'
   | 'INGRESO_REMUNERACION' | 'INGRESO_HABER_PREVISIONAL' | 'INGRESO_INDEMNIZACION'
-  | 'CAUSA_ALIMENTARIA' | 'CAUSA_COMUN'
+  | 'CAUSA_ALIMENTARIA' | 'CAUSA_LITISEXPENSAS' | 'CAUSA_COMUN'
   | 'MATERIA_LABORAL' | 'MATERIA_PREVISIONAL' | 'MATERIA_CIVIL_COMERCIAL'
-  | 'MATERIA_ALIMENTARIA' | 'MATERIA_CONSUMO';
+  | 'MATERIA_ALIMENTARIA' | 'MATERIA_CONSUMO'
+  | 'INTERVENCION_DE_PERSONA_MENOR_DE_EDAD'
+  | 'REGIMEN_ART_277_LCT_ANTERIOR' | 'REGIMEN_ART_277_LCT_LEY_27802';
 
 export interface ReferenciaPlantilla {
   readonly id: IdPlantilla;
@@ -767,6 +900,12 @@ export type IdAccionProfesional =
   | 'EVALUAR_PEDIDO_DE_READECUACION_DE_EMBARGO'
   | 'EVALUAR_PLANTEO_DE_INTANGIBILIDAD_DE_CUENTA_SUELDO'
   | 'REVISAR_PROPUESTA_DE_HONORARIOS'
+  /** CA-63. La materia excluida sólo se destraba con dictamen, no con datos. */
+  | 'DICTAMINAR_ADMISIBILIDAD_DE_CUOTA_LITIS_EN_MATERIA_PROTEGIDA'
+  /** CA-64. */
+  | 'DICTAMINAR_DERECHO_TRANSITORIO_APLICABLE'
+  /** CA-41. */
+  | 'EVALUAR_INEMBARGABILIDAD_DE_HABER_PREVISIONAL'
   | 'RATIFICAR_PARAMETRO_PENDIENTE'
   | 'ACTIVAR_VALOR_DE_REFERENCIA'
   | 'AUTORIZAR_COMBINACION_DE_HONORARIO_Y_COMISION';
@@ -804,7 +943,9 @@ export type RutaCampoEntrada =
   | 'afectaciones' | 'afectaciones.causa' | 'afectaciones.montoMensual'
   | 'afectaciones.tipoCuenta'
   | 'propuestaHonorarios' | 'propuestaHonorarios.materia'
-  | 'propuestaHonorarios.jurisdiccion' | 'propuestaHonorarios.resultadoEconomicoEstimado';
+  | 'propuestaHonorarios.jurisdiccion' | 'propuestaHonorarios.resultadoEconomicoEstimado'
+  | 'propuestaHonorarios.fechaDelHechoGenerador'
+  | 'propuestaHonorarios.intervieneMenorConRepresentacion';
 
 export type TipoObligacion =
   | 'PRESTAMO_PERSONAL' | 'TARJETA_DE_CREDITO' | 'SALDO_CUENTA_CORRIENTE'
@@ -913,7 +1054,14 @@ export interface DatosIngreso {
   readonly incluyeSAC: boolean | null;
 }
 
-export type CausaAfectacion = 'ALIMENTARIA' | 'COMUN' | 'LABORAL_A_FAVOR_DEL_TRABAJADOR' | 'FISCAL' | 'DESCONOCIDA';
+/**
+ * CA-40 y CA-41. `LITISEXPENSAS` es una causa propia y no un caso de
+ * `ALIMENTARIA`: la Ley 24.241 art. 14 inc. c) las nombra por separado y el
+ * régimen que desplaza la inembargabilidad previsional las incluye a ambas.
+ */
+export type CausaAfectacion =
+  | 'ALIMENTARIA' | 'LITISEXPENSAS' | 'COMUN'
+  | 'LABORAL_A_FAVOR_DEL_TRABAJADOR' | 'FISCAL' | 'DESCONOCIDA';
 
 export type TipoCuentaAfectada = 'CUENTA_SUELDO' | 'CAJA_DE_AHORRO' | 'CUENTA_CORRIENTE' | 'DESCONOCIDA';
 
@@ -936,6 +1084,13 @@ export type MateriaDelCaso =
 export interface PropuestaHonorarios {
   readonly jurisdiccion: Jurisdiccion;
   readonly materia: MateriaDelCaso;
+  /**
+   * Fecha del hecho del análisis E: la del hecho generador de la obligación o
+   * del crédito sobre el que se pacta. Es la fecha contra la que se resuelven
+   * los topes arancelarios (CA-29) y la ventana de transición del art. 277 LCT
+   * (CA-64). Sin ella, el análisis E es INDETERMINABLE por falta de dato.
+   */
+  readonly fechaDelHechoGenerador: FechaCivil | null;
   readonly porcentajeCuotaLitisPropuesto: Racional | null;
   readonly porcentajeComisionPlataformaPropuesto: Racional | null;
   readonly profesionalAsumeCostas: boolean | null;
@@ -1014,6 +1169,8 @@ export type ClaveSupuesto =
   | 'PERIODICIDAD_DE_CAPITALIZACION_ADMITIDA'
   | 'REGISTRO_CREDITICIO_EVALUADO'
   | 'VALOR_DE_REFERENCIA_DE_INGRESO_MINIMO'
+  | 'TIPO_DE_INGRESO_EVALUADO'
+  | 'MATERIA_DEL_CASO_EVALUADA'
   | 'BASE_DE_CALCULO_DE_LA_REMUNERACION'
   | 'BASE_DE_CALCULO_DEL_RESULTADO_ECONOMICO'
   | 'MONEDA_DE_ORIGEN_SIN_CONVERSION';
@@ -1301,6 +1458,23 @@ export type ResultadoAnalisisD =
   | {
       readonly estado: 'EVALUADO';
       readonly calculo: CalculoEmbargabilidad;
+      readonly hallazgos: readonly Hallazgo[];
+      readonly supuestos: readonly Supuesto[];
+      readonly trazabilidad: Trazabilidad;
+    }
+  /**
+   * CA-41. No hay `CalculoEmbargabilidad` porque no hay escala que calcular:
+   * la protección es la regla. Modelarlo como `EVALUADO` con
+   * `montoEmbargableMaximo: 0` sería decirle al titular que el régimen salarial
+   * se le aplicó y dio cero, que es una afirmación distinta y falsa.
+   */
+  | {
+      readonly estado: 'INEMBARGABLE_POR_REGLA';
+      readonly tipoIngreso: TipoIngreso;
+      readonly proteccion: UsoParametro;
+      readonly causasQueDesplazanLaProteccion: readonly CausaAfectacion[];
+      /** Afectaciones informadas cuya causa cae en la excepción (CA-40). */
+      readonly afectacionesConCausaExceptuada: readonly IdAfectacion[];
       readonly hallazgos: readonly Hallazgo[];
       readonly supuestos: readonly Supuesto[];
       readonly trazabilidad: Trazabilidad;
