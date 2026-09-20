@@ -1,0 +1,26 @@
+{
+  "name": "mejorar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma de gestión de deudas para deudores del sistema financiero argentino",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build:libs": "pnpm --filter @mejorar/shared build && pnpm --filter @mejorar/integrations build",
+    "build": "pnpm run build:libs && pnpm --filter @mejorar/api build && pnpm --filter @mejorar/web build",
+    "typecheck": "pnpm run build:libs && pnpm -r --no-bail typecheck",
+    "test": "pnpm --filter @mejorar/shared test && pnpm --filter @mejorar/integrations test",
+    "dev:api": "pnpm --filter @mejorar/api dev",
+    "dev:web": "pnpm --filter @mejorar/web dev",
+    "dev:mobile": "pnpm --filter @mejorar/mobile start",
+    "db:up": "docker compose up -d postgres redis",
+    "db:push": "pnpm --filter @mejorar/api prisma:push",
+    "db:seed": "pnpm --filter @mejorar/api prisma:seed",
+    "clean": "rm -rf node_modules packages/*/node_modules apps/*/node_modules packages/*/dist apps/*/dist apps/web/.next"
+  },
+  "devDependencies": {
+    "typescript": "5.9.2"
+  }
+}
