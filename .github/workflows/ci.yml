@@ -1,0 +1,204 @@
+name: CI
+
+# Integración continua del monorepo.
+#
+# Orden: lo barato primero, fallo temprano.
+#   identidad del contrato -> lint -> typecheck -> tests unitarios -> build -> benchmark
+#
+# Este pipeline no despliega nada y no usa ningún secreto: sólo lee el
+# repositorio. El despliegue es otro flujo y exige aprobación humana puntual
+# para ese despliegue (compuerta G6, `CLAUDE.md` §4).
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+      - 'feat/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+  # Presupuestos de `specs/004-motor-reglas-legales/plan.md` §6.
+  UMBRAL_P95_MS: '50'
+  UMBRAL_CONTEXTO_MB: '3'
+  UMBRAL_COMPILACION_S: '20'
+  # `informativo` reporta y no rompe la construcción; `bloqueante` la rompe.
+  # Se pasa a `bloqueante` cuando el product owner acuerde exigir el umbral
+  # sobre el motor ya implementado (hoy no hay línea de base todavía).
+  MODO_BENCHMARK: informativo
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Identidad del contrato (ADR-017). Segundos, sin dependencias: va primero.
+  # ---------------------------------------------------------------------------
+  contrato:
+    name: Identidad del contrato (ADR-017)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Traer el repositorio
+        uses: actions/checkout@v4
+
+      - name: Verificar que la copia del contrato es idéntica a la aprobada
+        run: ./scripts/ci/verificar-identidad-contrato.sh
+
+  # ---------------------------------------------------------------------------
+  # 2. Calidad: lint, typecheck, tests unitarios y build, en ese orden.
+  # ---------------------------------------------------------------------------
+  calidad:
+    name: Lint, typecheck, tests y build
+    runs-on: ubuntu-24.04
+    needs: contrato
+    steps:
+      - name: Traer el repositorio
+        uses: actions/checkout@v4
+
+      - name: Detectar andamiaje del workspace
+        id: andamiaje
+        run: ./scripts/ci/detectar-andamiaje.sh
+
+      - name: Preparar Node
+        if: steps.andamiaje.outputs.instalable == 'si'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Habilitar pnpm (la versión que fija `packageManager`)
+        if: steps.andamiaje.outputs.instalable == 'si'
+        run: corepack enable
+
+      - name: Instalar dependencias
+        if: steps.andamiaje.outputs.instalable == 'si'
+        run: pnpm install --frozen-lockfile
+
+      # Lint. Reglas de determinismo del motor legal (ADR-016 / CA-31) y, cuando
+      # la feature 001 la agregue, la matriz de importaciones de ADR-009.
+      # `--max-warnings=0` es parte de la decisión: un `eslint-disable` sobre
+      # estas reglas ya es inerte por `noInlineConfig`, y acá además se rechaza
+      # en vez de quedar como aviso que nadie mira (ADR-009, consecuencias).
+      #
+      # ESCALADO al orquestador: `eslint` y `@typescript-eslint/parser` todavía
+      # no están declarados como dependencias de desarrollo de la raíz, y el
+      # `package.json` de la raíz no es del alcance de escritura de `cicd`
+      # (andamiaje pendiente de ratificación, `CLAUDE.md` §7). Mientras falten,
+      # este paso avisa en vez de romper la construcción de otros agentes por
+      # algo que ellos no pueden arreglar. **En cuanto se declaren, esto tiene
+      # que pasar a `exit 1`**: es una línea y cierra el agujero.
+      - name: Lint
+        if: steps.andamiaje.outputs.instalable == 'si'
+        run: |
+          set -euo pipefail
+          if [ ! -x node_modules/.bin/eslint ]; then
+            echo "::warning file=eslint.config.mjs::Las reglas de determinismo del motor (ADR-016 / CA-31) NO se están aplicando: faltan las dependencias de desarrollo 'eslint' y '@typescript-eslint/parser' en el package.json de la raíz."
+            {
+              echo "## Lint"
+              echo ""
+              echo "**No ejecutado.** \`eslint.config.mjs\` existe y sus reglas están probadas, pero la raíz"
+              echo "todavía no declara \`eslint\` ni \`@typescript-eslint/parser\`. Hasta que se declaren, la"
+              echo "prohibición de \`new Date()\` / \`Date.now()\` / \`Math.random()\` / \`process.env\` en"
+              echo "\`packages/shared/src/motor-legal/\` no se verifica de forma mecánica."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          pnpm exec eslint . --max-warnings=0
+
+      # Recursivo y no por script de la raíz: los scripts de la raíz nombran
+      # paquetes que todavía no existen. `pnpm -r run` corre el script en cada
+      # paquete que lo tenga, en orden topológico, y omite los que no.
+      - name: Typecheck
+        if: steps.andamiaje.outputs.instalable == 'si'
+        run: pnpm -r run typecheck
+
+      - name: Tests unitarios
+        if: steps.andamiaje.outputs.instalable == 'si'
+        run: pnpm -r run test
+
+      # El tiempo de compilación de `packages/shared` también es un presupuesto
+      # del plan (§6, <= 20 s, por el tipo recursivo `ContieneClaveProhibida`).
+      # Se mide acá y se reporta; no rompe la construcción.
+      - name: Build de las librerías (con medición del tiempo de compilación)
+        if: steps.andamiaje.outputs.instalable == 'si'
+        run: |
+          set -euo pipefail
+          inicio=$(date +%s)
+          pnpm -r run build
+          duracion=$(( $(date +%s) - inicio ))
+          echo "## Tiempo de compilación de las librerías" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`pnpm -r run build\`: ${duracion}s (presupuesto del plan §6 para \`packages/shared\`: ${UMBRAL_COMPILACION_S}s)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$duracion" -gt "$UMBRAL_COMPILACION_S" ]; then
+            echo "::warning::La compilación tardó ${duracion}s, por encima del presupuesto de ${UMBRAL_COMPILACION_S}s (plan 004 §6, ADR-015 'cómo se revierte')."
+          fi
+
+      - name: Estado del andamiaje pendiente
+        if: steps.andamiaje.outputs.instalable != 'si'
+        run: |
+          {
+            echo "## Calidad"
+            echo ""
+            echo "Diferido: todavía no hay \`pnpm-lock.yaml\`, así que el workspace no es instalable."
+            echo "En cuanto exista el andamiaje (feature 001), lint, typecheck, tests y build pasan a ser obligatorios sin tocar este archivo."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # 3. Benchmark del motor legal. Último, y por ahora informativo.
+  # ---------------------------------------------------------------------------
+  benchmark:
+    name: Benchmark del motor legal
+    runs-on: ubuntu-24.04
+    needs: calidad
+    steps:
+      - name: Traer el repositorio
+        uses: actions/checkout@v4
+
+      - name: Detectar andamiaje del workspace
+        id: andamiaje
+        run: ./scripts/ci/detectar-andamiaje.sh
+
+      - name: Preparar Node
+        if: steps.andamiaje.outputs.instalable == 'si' && steps.andamiaje.outputs.motor == 'si'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Habilitar pnpm
+        if: steps.andamiaje.outputs.instalable == 'si' && steps.andamiaje.outputs.motor == 'si'
+        run: corepack enable
+
+      - name: Instalar dependencias
+        if: steps.andamiaje.outputs.instalable == 'si' && steps.andamiaje.outputs.motor == 'si'
+        run: pnpm install --frozen-lockfile
+
+      - name: Construir las librerías
+        if: steps.andamiaje.outputs.instalable == 'si' && steps.andamiaje.outputs.motor == 'si'
+        run: pnpm -r run build
+
+      - name: Medir p95 de una evaluación y tamaño del contexto
+        if: steps.andamiaje.outputs.instalable == 'si' && steps.andamiaje.outputs.motor == 'si'
+        run: node ./scripts/ci/benchmark-motor.mjs
+
+      - name: Guardar la línea de base
+        if: steps.andamiaje.outputs.instalable == 'si' && steps.andamiaje.outputs.motor == 'si'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-motor-${{ github.sha }}
+          path: benchmark-motor.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Benchmark pendiente
+        if: steps.andamiaje.outputs.instalable != 'si' || steps.andamiaje.outputs.motor != 'si'
+        run: |
+          {
+            echo "## Benchmark del motor"
+            echo ""
+            echo "Pendiente: todavía no hay motor compilable que medir (T-01 a T-13 de la feature 004)."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,47 @@
+{
+  "name": "@mejorar/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dominio puro de Mejorar: motor de reglas legales argentinas, dinero exacto y tiempo civil. Sin framework, sin E/S.",
+  "license": "UNLICENSED",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./motor-legal": {
+      "types": "./dist/motor-legal/index.d.ts",
+      "default": "./dist/motor-legal/index.js"
+    },
+    "./motor-legal/contrato": {
+      "types": "./dist/motor-legal/contrato/index.d.ts",
+      "default": "./dist/motor-legal/contrato/index.js"
+    },
+    "./motor-legal/dinero": {
+      "types": "./dist/motor-legal/dinero/index.d.ts",
+      "default": "./dist/motor-legal/dinero/index.js"
+    },
+    "./motor-legal/tiempo": {
+      "types": "./dist/motor-legal/tiempo/index.d.ts",
+      "default": "./dist/motor-legal/tiempo/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verificar:contrato": "node scripts/verificar-contrato.mjs",
+    "clean": "rm -rf dist tsconfig.build.tsbuildinfo"
+  },
+  "devDependencies": {
+    "typescript": "5.9.2",
+    "vitest": "3.2.4"
+  }
+}

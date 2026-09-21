@@ -1,0 +1,542 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Esquema de base de datos de Mejorar
+//
+// Feature  : 004 — Motor de reglas legales argentinas
+// Tarea    : T-03 (specs/004-motor-reglas-legales/tasks.md)
+// Fuente   : specs/004-motor-reglas-legales/modelo-datos.md, Bloque A
+//            (aprobado en G2). Este archivo NO decide el modelo: lo transcribe.
+// Decisión : ADR-007 — PostgreSQL 16 + Prisma 6, migraciones versionadas,
+//            nunca `db push`, SQL crudo donde Prisma no llega.
+//
+// ALCANCE DE ESTE ARCHIVO HOY: Bloque A (catálogo normativo), A.1 a A.6.
+// Los bloques A.7 a A.9, B, C y D los agregan las tareas T-06 y T-09.
+//
+// LO QUE PRISMA NO EXPRESA Y VIVE EN LAS MIGRACIONES (ADR-007 §2.4):
+//   - el tipo `daterange` de `TramoParametro.vigencia` (acá, `Unsupported`);
+//   - la restricción de exclusión GiST que prohíbe vigencias solapadas (R-13);
+//   - todas las restricciones `CHECK` (R-1, R-2 y las de A.2);
+//   - los índices parciales de las consultas Q-04, Q-09;
+//   - los disparadores de inmutabilidad y la verificación diferida "todo tramo
+//     CARGADO tiene al menos una cita" (migración 0009, según modelo-datos §6.1).
+// Todo eso está en `prisma/migrations/**` y explicado en `prisma/LEEME.md`.
+//
+// CLASIFICACIÓN DE SENSIBILIDAD (modelo-datos §1 y §4): cada campo lleva su
+// marca PUB / INT / PERS / PATR en el comentario de la línea. En el Bloque A no
+// hay ningún campo PATR: no hay un solo dato patrimonial del deudor en el
+// catálogo normativo — es la ley y nuestra lectura de la ley. Por lo tanto
+// tampoco hay nada cifrado ni ningún hash de búsqueda en este bloque.
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider      = "prisma-client-js"
+  // ADR-007, consecuencias negativas: el motor binario se fija por plataforma.
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // El esquema `identidad` existe (migración 0001) pero Prisma no lo administra:
+  // es de otro rol y otra clave (modelo-datos D-4 y §7.4).
+  schemas  = ["motor"]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enumeraciones del Bloque A
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Análisis del motor al que pertenece un parámetro (modelo-datos A.1).
+/// Los cinco primeros valores son los de `Analisis` en
+/// `specs/contratos/motor-reglas-legales.ts` (línea 929); `TRANSVERSAL` es del
+/// modelo de datos, para los parámetros que no pertenecen a un solo análisis.
+enum AnalisisMotor {
+  A_PRESCRIPCION
+  B_INTERESES
+  C_ARCHIVO
+  D_EMBARGABILIDAD
+  E_HONORARIOS
+  TRANSVERSAL
+
+  @@schema("motor")
+}
+
+/// Forma que admite `TramoParametro.valor` (modelo-datos A.1).
+enum TipoValorParametro {
+  PLAZO_DIAS
+  PLAZO_ANIOS
+  PORCENTAJE
+  RACIONAL
+  MONTO
+  BOOLEANO
+  ENUM_CERRADO
+  LISTA_CERRADA
+  TRAMOS
+
+  @@schema("motor")
+}
+
+/// CA-43 y decisión 004-D. `TODAS` no es comodín de búsqueda: un parámetro
+/// cargado como `TODAS` aplica a cualquier jurisdicción, y uno cargado por
+/// jurisdicción NO cae de vuelta a otra (CA-52, S-09; R-14).
+/// Divergencia conocida con el contrato del arquitecto (línea 430), que enumera
+/// las 24 provincias: el modelo-datos aprobado en G2 acota el enum a las
+/// jurisdicciones del alcance de la 004. Reportado al orquestador.
+enum Jurisdiccion {
+  NACIONAL
+  FEDERAL
+  BUENOS_AIRES
+  CABA
+  CORDOBA
+  SANTA_FE
+  TODAS
+
+  @@schema("motor")
+}
+
+/// Estados de primera clase, no ausencia de fila (modelo-datos A.2): reproducen
+/// los marcadores [D] y [!] del dictamen §5.
+enum DisponibilidadParametro {
+  CARGADO
+  A_DETERMINAR_POR_EL_ESTUDIO
+  CONTRADICCION_ABIERTA
+
+  @@schema("motor")
+}
+
+/// Leyenda de confiabilidad del dictamen. `C` se trata igual que `P` a efectos
+/// del bloqueo: el bloqueo NO depende de esta columna sino de
+/// `estadoRatificacion` (condición C-02).
+enum Confiabilidad {
+  V
+  C
+  P
+  D
+  CONTRADICCION
+  I
+
+  @@schema("motor")
+}
+
+enum EstadoRatificacion {
+  SIN_RATIFICAR
+  RATIFICADO
+
+  @@schema("motor")
+}
+
+/// Catálogo cerrado del contrato (línea 642). No es texto libre.
+enum ClaveNotaDeAlcance {
+  TEXTO_SUSTITUIDO_POR_DNU_70_2023
+  PENDIENTE_VERIFICACION_DOCUMENTAL
+  CORROBORADO_POR_BUSCADOR_SIN_FUENTE_OFICIAL
+  UMBRAL_DE_ALERTA_INTERNO_NO_TOPE_LEGAL
+  PARAMETRO_DE_PRODUCTO_NO_NORMATIVO
+  CRITERIO_JURISPRUDENCIAL_NO_LEGAL
+  PROHIBICION_O_TOPE_EN_DISPUTA
+  DERECHO_TRANSITORIO_EN_DISPUTA
+
+  @@schema("motor")
+}
+
+/// modelo-datos A.3. Divergencia conocida con el contrato (línea 413), que usa
+/// `JURISPRUDENCIA` y `LEY_PROVINCIAL` en vez de `FALLO`. Reportado.
+enum TipoNorma {
+  LEY
+  DECRETO
+  DNU
+  CODIGO
+  COMUNICACION_BCRA
+  RESOLUCION
+  FALLO
+
+  @@schema("motor")
+}
+
+enum MotivoRevocacion {
+  CAMBIO_NORMATIVO
+  ERROR_DETECTADO
+  VENCIMIENTO_DE_REVISION
+  BAJA_DEL_PROFESIONAL
+
+  @@schema("motor")
+}
+
+enum EstadoMatricula {
+  VIGENTE
+  SUSPENDIDA
+  CANCELADA
+  NO_VERIFICADA
+
+  @@schema("motor")
+}
+
+enum EstadoCatalogo {
+  BORRADOR
+  PUBLICADO
+  RETIRADO
+
+  @@schema("motor")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A.1 — ParametroNormativo: registro maestro de claves
+// Catálogo CERRADO. Se puebla por seed/migración; ninguna vía de aplicación
+// inserta filas acá (modelo-datos A.1, invariantes).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ParametroNormativo {
+  /// PUB. Igual al literal de `ClaveParametro` del contrato. Ej.
+  /// `prescripcion.plazoGenerico`.
+  clave String @id
+
+  /// PUB.
+  analisis AnalisisMotor
+
+  /// PUB. Columna "Qué representa" del dictamen §5.
+  descripcion String
+
+  /// PUB. Determina qué forma admite `TramoParametro.valor`.
+  tipoValor TipoValorParametro
+
+  /// PUB. `años`, `días corridos`, `% anual`, `veces el SMVM`. Obligatoria si
+  /// `tipoValor` no es booleano ni enum (CHECK en la migración).
+  unidad String?
+
+  /// PUB. `false` en los umbrales de producto: un umbral de producto no se
+  /// presenta como norma.
+  esNormativo Boolean
+
+  /// PUB. `true` en los parámetros del análisis E (CA-43).
+  admiteJurisdiccion Boolean
+
+  /// PUB. Si falta o no está ratificado, el análisis entero devuelve sin
+  /// resultado (CA-39, CA-40).
+  bloqueanteDeAnalisis Boolean
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  tramos TramoParametro[]
+
+  @@schema("motor")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A.2 — TramoParametro: el parámetro con su vigencia
+// Corazón de CA-29 y de la constitución #11. Tabla de sólo inserción: las
+// únicas columnas que admiten UPDATE son `retiradoEn` (§7.2).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TramoParametro {
+  /// INT. UUID v7 generado por quien inserta (no hay default en la base: el
+  /// contrato usa identificadores opacos y los produce la aplicación).
+  id String @id @db.Uuid
+
+  /// PUB.
+  claveParametro String
+
+  /// PUB.
+  jurisdiccion Jurisdiccion
+
+  /// PUB. Canónico, validado según `tipoValor`. NULL sólo si
+  /// `disponibilidad <> 'CARGADO'` (CHECK en la migración).
+  valor Json? @db.JsonB
+
+  /// PUB. `[desde, hasta)`. `hasta` no acotado = vigente sin término conocido.
+  /// Prisma no tiene tipo de rango: se declara `Unsupported` y se escribe con
+  /// SQL crudo. Sobre esta columna va la exclusión GiST (R-13) y la consulta
+  /// Q-04 `vigencia @> $fechaDelHecho`.
+  vigencia Unsupported("daterange")
+
+  /// PUB.
+  disponibilidad DisponibilidadParametro
+
+  /// PUB. No gobierna el bloqueo; ver el comentario del enum.
+  confiabilidadFuente Confiabilidad
+
+  /// INT. Nace siempre SIN_RATIFICAR (R-1 / C-03).
+  estadoRatificacion EstadoRatificacion @default(SIN_RATIFICAR)
+
+  /// INT.
+  ratificacionId String? @db.Uuid
+
+  /// PUB.
+  notaDeAlcance ClaveNotaDeAlcance?
+
+  /// INT. Linaje de correcciones: un tramo mal cargado no se edita, se
+  /// reemplaza.
+  reemplazaTramoId String? @db.Uuid
+
+  /// INT. Baja lógica. Nunca se borra mientras un CatalogoTramo lo referencie
+  /// (la clave foránea de A.6 lo impide).
+  retiradoEn DateTime? @db.Timestamptz(6)
+
+  /// INT. Identificador de operador, o `MIGRACION` / `SEED`.
+  cargadoPor String
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  parametro      ParametroNormativo  @relation(fields: [claveParametro], references: [clave], onDelete: Restrict, onUpdate: Restrict)
+  ratificacion   Ratificacion?       @relation(fields: [ratificacionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reemplazaA     TramoParametro?     @relation("LinajeTramoParametro", fields: [reemplazaTramoId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reemplazadoPor TramoParametro[]    @relation("LinajeTramoParametro")
+  citas          TramoParametroCita[]
+  enCatalogos    CatalogoTramo[]
+
+  /// A.2 invariante 5: no aporta unicidad; es el destino de la clave foránea
+  /// compuesta de A.6, que es lo que hace imposible CA-58.
+  @@unique([id, estadoRatificacion], map: "uq_tramo_id_estado_ratificacion")
+  /// Q-09 (tablero de administración): tramos sin ratificar. El índice real es
+  /// PARCIAL (`WHERE estadoRatificacion = 'SIN_RATIFICAR' AND retiradoEn IS
+  /// NULL`) y se crea en la migración; acá se declara para que Prisma lo conozca
+  /// y no proponga borrarlo. No hay índice btree sobre (claveParametro,
+  /// jurisdiccion, vigencia): esa consulta —Q-04, la más frecuente del sistema—
+  /// la sirve el índice GiST de la restricción de exclusión `ix_tramo_vigencia`.
+  @@index([claveParametro], map: "idx_tramo_sin_ratificar")
+  @@schema("motor")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A.3 — CitaNormativa y TramoParametroCita
+// CA-27: toda salida cita norma Y artículo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CitaNormativa {
+  /// PUB.
+  id String @id @db.Uuid
+
+  /// PUB.
+  tipoNorma TipoNorma
+
+  /// PUB. `Ley 25.065`, `CCyC`, `Decreto 484/87`, `Fallos 334:1276`.
+  identificacion String
+
+  /// PUB. Obligatorio: CA-27 pide artículo, no norma a secas.
+  articulo String
+
+  /// PUB.
+  inciso String?
+
+  /// PUB. Transcripción literal corroborada.
+  textoTranscripto String?
+
+  /// PUB.
+  confiabilidad Confiabilidad
+
+  /// PUB.
+  fuenteUrl String?
+
+  /// PUB. Trazabilidad de `specs/legal/verificacion-documental.md`.
+  fechaConsulta DateTime? @db.Date
+
+  /// PUB. Ej. DNU 70/2023 → 21/12/2023.
+  publicadaBO DateTime? @db.Date
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  tramos TramoParametroCita[]
+
+  // Sin índices propios: una cita se alcanza siempre desde su tramo
+  // (`TramoParametroCita`) y no hay consulta prevista que la busque por norma.
+  // Regla 8 del mandato: un índice sin consulta es costo.
+  @@schema("motor")
+}
+
+/// N:M entre tramo y cita. PK compuesta (modelo-datos A.3).
+model TramoParametroCita {
+  /// INT.
+  tramoId String @db.Uuid
+
+  /// INT.
+  citaId String @db.Uuid
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  tramo TramoParametro @relation(fields: [tramoId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  cita  CitaNormativa  @relation(fields: [citaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([tramoId, citaId])
+  /// Sostiene la clave foránea inversa: sin él, borrar o verificar una cita
+  /// exige un recorrido secuencial de la tabla de vínculos.
+  @@index([citaId], map: "idx_tramocita_cita")
+  @@schema("motor")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A.4 — Ratificacion: la firma del profesional sobre los parámetros (C-03)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Ratificacion {
+  /// INT.
+  id String @id @db.Uuid
+
+  /// PERS. Identificador opaco del profesional.
+  idProfesional String
+
+  /// PERS. Se COPIA acá además de estar en A.5: la ratificación es un hecho
+  /// histórico y no cambia si mañana el colegio renumera.
+  matricula String
+
+  /// PERS.
+  jurisdiccionMatricula Jurisdiccion
+
+  /// PERS. Único nombre de persona en todo el modelo. Base legal: ejecución del
+  /// contrato con el profesional y responsabilidad profesional identificable
+  /// (dictamen §2.1). No es dato del deudor; CA-60 no lo alcanza. En claro y
+  /// con índice a propósito: cifrarlo impediría verificar la matrícula (§4.1).
+  nombreProfesional String
+
+  /// PERS.
+  fecha DateTime @db.Date
+
+  /// INT. C-03. Alimenta el tablero de vencimientos (Q-09).
+  fechaProximaRevision DateTime? @db.Date
+
+  /// INT. Identificador del documento en el almacén de objetos.
+  referenciaDocumentoFirmado String
+
+  /// INT. SHA-256 del PDF firmado. Sin esto, "está firmado" es una afirmación
+  /// sin prueba.
+  huellaDocumento String
+
+  /// PUB. Qué dice el profesional que ratificó, en sus términos.
+  alcanceDeclarado String
+
+  /// INT. Revocar no cambia el pasado: los catálogos ya publicados no se tocan
+  /// (A.4 invariante 2).
+  revocadaEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  motivoRevocacion MotivoRevocacion?
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  profesional MatriculaProfesional @relation(fields: [idProfesional], references: [idProfesional], onDelete: Restrict, onUpdate: Restrict)
+  tramos      TramoParametro[]
+
+  /// Q-09: ratificaciones con revisión vencida. El índice real es PARCIAL
+  /// (`WHERE revocadaEn IS NULL AND fechaProximaRevision IS NOT NULL`) y se
+  /// crea en la migración; acá se declara para que Prisma no proponga borrarlo.
+  @@index([fechaProximaRevision], map: "idx_ratificacion_revision")
+  /// Sostiene la clave foránea contra `MatriculaProfesional` y la consulta
+  /// "qué ratificó este profesional" al revocar (A.4, invariante 2).
+  @@index([idProfesional], map: "idx_ratificacion_profesional")
+  @@schema("motor")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A.5 — MatriculaProfesional
+// CA-47: sin matrícula registrada no hay ratificación ni confirmación posible.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model MatriculaProfesional {
+  /// PERS. Identificador opaco.
+  idProfesional String @id
+
+  /// PERS.
+  matricula String
+
+  /// PERS.
+  colegio String
+
+  /// PERS.
+  jurisdiccion Jurisdiccion
+
+  /// PERS.
+  estado EstadoMatricula
+
+  /// PERS.
+  vigenciaDesde DateTime @db.Date
+
+  /// PERS.
+  vigenciaHasta DateTime? @db.Date
+
+  /// INT.
+  verificadaEn DateTime? @db.Timestamptz(6)
+
+  /// INT. Padrón del colegio, constancia, etc.
+  fuenteVerificacion String?
+
+  /// INT. Baja lógica.
+  eliminadoEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  ratificaciones Ratificacion[]
+
+  @@unique([jurisdiccion, matricula], map: "uq_matricula_jurisdiccion")
+  /// Destino de la clave foránea compuesta de D.1 (R-4, tarea T-09).
+  @@unique([idProfesional, estado], map: "uq_matricula_id_estado")
+  @@schema("motor")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A.6 — CatalogoNormativo y CatalogoTramo: el conjunto exacto, congelado
+// CA-27, CA-31 y —sobre todo— CA-58: el bloqueo NO configurable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CatalogoNormativo {
+  /// INT. Monótona y legible: `2026.09.20-001`.
+  version String @id
+
+  /// INT. SHA-256 de la serialización canónica de todos sus tramos.
+  huellaContenido String
+
+  /// INT.
+  generadoEl DateTime @db.Timestamptz(6)
+
+  /// INT.
+  estado EstadoCatalogo @default(BORRADOR)
+
+  /// INT. La columna que hace cumplir CA-58 (R-2). Nace en `false`.
+  aptoProduccion Boolean @default(false)
+
+  /// INT.
+  publicadoPor String?
+
+  /// INT.
+  notas String?
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  tramos CatalogoTramo[]
+
+  /// Destino de la clave foránea compuesta de CatalogoTramo (R-2).
+  @@unique([version, aptoProduccion], map: "uq_catalogo_version_apto")
+  @@schema("motor")
+}
+
+model CatalogoTramo {
+  /// INT.
+  catalogoVersion String
+
+  /// INT. Réplica sostenida por clave foránea compuesta; no es desnormalización
+  /// por conveniencia: es el mecanismo de R-2.
+  catalogoAptoProduccion Boolean
+
+  /// INT.
+  tramoId String @db.Uuid
+
+  /// INT. Réplica sostenida por clave foránea compuesta.
+  tramoEstadoRatificacion EstadoRatificacion
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  catalogo CatalogoNormativo @relation(fields: [catalogoVersion, catalogoAptoProduccion], references: [version, aptoProduccion], onDelete: Restrict, onUpdate: Restrict, map: "fk_catalogotramo_catalogo")
+  tramo    TramoParametro    @relation(fields: [tramoId, tramoEstadoRatificacion], references: [id, estadoRatificacion], onDelete: Restrict, onUpdate: Restrict, map: "fk_catalogotramo_tramo")
+
+  /// Q-05: todos los tramos de un catálogo, para publicarlo o reproducirlo.
+  @@id([catalogoVersion, tramoId])
+  /// En qué catálogos entró un tramo: lo necesita la revocación de una
+  /// ratificación (A.4, invariante 2) y lo usa el motor de la base para
+  /// verificar la clave foránea compuesta con `ON UPDATE RESTRICT`.
+  @@index([tramoId], map: "idx_catalogotramo_tramo")
+  @@schema("motor")
+}
