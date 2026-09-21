@@ -68,12 +68,23 @@ humano**.
 | `dev-backend` | Implementa la API: módulos NestJS, RBAC, casos, negociaciones, colectivos, pagos, auditoría. | `apps/api/src/**` | Esquema Prisma, UI |
 | `dev-web` | Implementa los tres portales web (cliente, abogado, administrador). | `apps/web/**` | Backend, dominio |
 | `dev-mobile` | Implementa la app iOS/Android del deudor. | `apps/mobile/**` | Backend, dominio |
-| `tester` | Valida las features implementadas contra los criterios de aceptación de la spec. Plan de pruebas, e2e, informe de QA. | `**/*.test.ts`, `**/*.spec.ts`, `tests/**`, `specs/**/qa.md` | Código de producción |
+| `tester` | Valida las features implementadas contra los criterios de aceptación de la spec. Plan de pruebas, tests end-to-end, informe de QA, veredicto de G5. | `tests/e2e/**`, `**/*.e2e.test.ts`, `specs/**/qa.md` | Código de producción, tests unitarios de un paquete ajeno |
 | `cicd` | Implementa la entrega: pipelines, entornos, contenedores, migraciones automáticas, observabilidad, secretos. | `.github/workflows/**`, `Dockerfile*`, `docker-compose*`, `infra/**` | Código de aplicación |
 | `compliance-legal` | Revisor. Verifica que cada spec y cada implementación respete el marco normativo argentino y marque lo que requiere validación de un abogado matriculado. | `specs/**/cumplimiento.md`, `docs/03-*` | Código |
 
 Un agente que necesita tocar algo fuera de su columna "Escribe" **no lo toca**:
 reporta el bloqueo al orquestador, que asigna al agente correcto.
+
+**Tests unitarios: son de quien implementa, no del `tester`.** Cada agente
+`dev-*` y `database-engineer` escribe los tests unitarios de su propio paquete,
+co-ubicados con el código (`*.test.ts` dentro de su propio alcance de
+escritura). Es lo que permite TDD y evita que un solo agente sea cuello de
+botella de ocho desarrolladores. El `tester` no reemplaza esa responsabilidad:
+es dueño de los tests end-to-end (`tests/e2e/**`), de verificar que la
+cobertura declarada por cada `dev-*` cubre de verdad los criterios de
+aceptación que le tocaban, y del veredicto de G5. Ningún criterio de aceptación
+pasa G5 sin al menos un test — unitario o end-to-end — que lo demuestre.
+(Decisión registrada en `specs/REGISTRO-COMPUERTAS.md`, entrada 022.)
 
 ---
 
