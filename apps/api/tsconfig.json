@@ -1,0 +1,17 @@
+{
+  // Sólo para `typecheck`. Este paquete no compila a `dist`: hoy no tiene
+  // código de aplicación —`src/` está vacío hasta que `dev-backend` escriba la
+  // API NestJS en la feature 007— y lo único que hay en TypeScript son los
+  // tests del esquema, que ejecuta Vitest con su propio transpilador.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // `ESNext` + `bundler` y no el `commonjs` de la base: los tests usan
+    // `import.meta.url` para ubicar el directorio de migraciones, que es lo que
+    // Vitest provee y `__dirname` no.
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["prisma/**/*.ts", "vitest.config.ts"]
+}

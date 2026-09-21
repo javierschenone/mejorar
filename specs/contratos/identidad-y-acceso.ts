@@ -19,7 +19,8 @@
  * 1. Este archivo es la **fuente normativa** del contrato. La copia que viva en
  *    `packages/shared/src/identidad/contrato/v1.ts` debe ser **idéntica byte a
  *    byte** a la parte de este archivo marcada como `[DOMINIO PURO]`; el
- *    pipeline lo verifica (ADR-017, aplicado a esta feature en ADR-022).
+ *    pipeline lo verifica (ADR-017, aplicado a esta feature en `plan.md` §2 y
+ *    obligación de frontera F-11).
  * 2. Todo campo cuyo valor puede faltar se declara **requerido y anulable**
  *    (`: T | null`), nunca opcional (`?:`). "No lo sé" es una decisión explícita.
  * 3. Todo objeto es `readonly` en profundidad.

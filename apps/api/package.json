@@ -8,12 +8,15 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:validate": "prisma validate",
-    "test": "vitest run"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@prisma/client": "6.19.3"
   },
   "devDependencies": {
+    "@types/node": "22.20.4",
     "@types/pg": "8.11.10",
     "pg": "8.13.1",
     "prisma": "6.19.3",

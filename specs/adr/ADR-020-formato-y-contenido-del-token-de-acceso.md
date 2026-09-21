@@ -42,15 +42,15 @@ sesión y el nivel de autenticación. Nada más. Los permisos se derivan en cada
 petición (ADR-022) y la vigencia de la sesión se consulta en cada petición
 (ADR-021).**
 
-1. **Contenido cerrado.** `ContenidoTokenDeAcceso` tiene exactamente once
-   campos: `iss`, `aud`, `sub`, `sid`, `jti`, `iat`, `nbf`, `exp`, `aut`,
-   `auth_time` y la cabecera con `alg`/`typ`/`kid`. `sub` es un `IdUsuario`
+1. **Contenido cerrado.** `ContenidoTokenDeAcceso` tiene exactamente diez
+   campos: `iss`, `aud`, `sub`, `sid`, `jti`, `iat`, `nbf`, `exp`, `aut` y
+   `auth_time`; la cabecera aparte lleva `alg`, `typ` y `kid`. `sub` es un `IdUsuario`
    (`IdOpaco<'usuario'>`, ULID sin significado); `sid` es la sesión.
 2. **Lo que NO lleva, y no se agrega sin ADR de reemplazo:** correo, nombre,
    CUIT/CUIL, rol, lista de permisos, matrícula, jurisdicción, estado de
    verificación profesional, IP, ubicación, dispositivo, y cualquier dato
    patrimonial de cualquier feature futura. Un test de forma sobre la interfaz
-   del contrato falla si aparece un campo nuevo.
+   del contrato falla si aparece un campo nuevo en cualquiera de las dos.
 3. **`typ: 'at+jwt'`** (RFC 9068) y `aud: 'mejorar-api'`: un token de acceso no
    puede confundirse con un token de otra clase ni presentarse a otro receptor.
 4. **EdDSA con par de claves por entorno, no secreto compartido.** La API firma
@@ -93,7 +93,7 @@ petición (ADR-022) y la vigencia de la sesión se consulta en cada petición
 
 `tester`: un test por cada uno de CA-07, CA-12 y CA-14; un **test de forma** que
 enumera las claves de `ContenidoTokenDeAcceso` y falla si aparece cualquiera que
-no esté en la lista de once; un test que toma un token válido, le cambia `alg` a
+no esté en la lista de diez; un test que toma un token válido, le cambia `alg` a
 `none` y a `HS256` con la clave pública como secreto, y verifica que los dos se
 rechazan; un test de que la suspensión de matrícula (CA-30) tiene efecto en la
 **petición siguiente**, sin esperar el vencimiento.
