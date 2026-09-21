@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 | --- | --- |
-| Versión | **3** — cierra las 5 decisiones de G1 (002-A a 002-E) |
+| Versión | **4** — declara la finalidad del CUIT/CUIL (escalamiento E-1 de `plan.md`) |
 | Estado | EN REVISIÓN (G1) |
 | Autor | orquestador |
 | Revisor legal | `compliance-legal` → `specs/002-identidad-y-acceso/cumplimiento.md` (APTO CON CONDICIONES) |
@@ -115,19 +115,21 @@ CA-03  Dada una contraseña que no cumple la política mínima (longitud, sin
        Entonces se rechaza con el motivo exacto, sin exponer la política
        completa como si fuera un desafío a resolver
 
-CA-04  Dado un CUIT/CUIL ingresado que ya pertenece a una cuenta existente   [v2]
+CA-04  Dado un CUIT/CUIL ingresado que ya pertenece a una cuenta existente   [v4]
        Cuando alguien intenta registrarse con ese mismo CUIT/CUIL
        Entonces el sistema NO revela a quien se registra que el CUIT/CUIL ya
        tiene cuenta: aplica exactamente el mismo tratamiento de no-revelación
        que CA-02 le da al correo, y notifica al dueño real por su canal de
        contacto registrado
        Y en todos los casos se verifica el dígito verificador antes de
-       aceptar el CUIT/CUIL (`shared/src/identidad/cuit.ts`, ya existe en el
-       dominio)
+       aceptar el CUIT/CUIL (`packages/shared/src/identidad/cuit.ts` —
+       **todavía no está implementado**; es entregable pendiente asignado a
+       `dev-dominio`, ver decisión E-1 más abajo)
        [Condición C-002-04. Defecto corregido: la versión 1 revelaba, por
        CUIT/CUIL, exactamente lo que CA-02 y R-05 prohíben revelar por
        correo — que una persona determinada es usuaria de una plataforma de
-       gestión de deudas]
+       gestión de deudas. Finalidad declarada en R-11 — decisión de G2,
+       escalamiento E-1 de `plan.md`]
 
 CA-05  Dado un registro como abogado con número de matrícula y jurisdicción  [v2]
        Cuando se completa el alta
@@ -274,17 +276,21 @@ CA-30  Dado un abogado verificado                                           [v2]
        `vigenciaHasta`
        [Salvaguarda M-3]
 
-CA-31  Dada una cuenta en estado PENDIENTE_DE_VERIFICACION_PROFESIONAL       [v2]
-       Cuando transcurre el plazo máximo de revisión (parámetro, propuesta
-       inicial: 5 días hábiles, sujeta a validación)
+CA-31  Dada una cuenta en estado PENDIENTE_DE_VERIFICACION_PROFESIONAL       [v4]
+       Cuando transcurren **7 días corridos** desde el alta (parámetro de
+       producto, no normativo, ajustable sin volver a esta compuerta)
        Entonces se escala al back-office, y el sistema NUNCA presenta el
        texto "verificado" sin la fecha y la constancia contra la que se
        verificó
-       [Salvaguarda M-4 y M-6. Un abogado en limbo indefinido es trato
-       indigno — art. 8 bis LDC — y, para el cliente que lo espera, servicio
-       no prestado. Declarado como dependencia hacia 008/012/013 el control
-       de que la jurisdicción de la matrícula limita la asignación de casos
-       — salvaguarda M-7, defecto D-002-07]
+       [Salvaguarda M-4 y M-6. Se cambia de "5 días hábiles" a "7 días
+       corridos" — decisión de G2, escalamiento E-5 de `plan.md`: el sistema
+       no tiene calendario de feriados argentinos (nacionales y
+       provinciales) y construir uno sólo para este cómputo no se justifica
+       todavía. Un abogado en limbo indefinido es trato indigno — art. 8 bis
+       LDC — y, para el cliente que lo espera, servicio no prestado.
+       Declarado como dependencia hacia 008/012/013 el control de que la
+       jurisdicción de la matrícula limita la asignación de casos —
+       salvaguarda M-7, defecto D-002-07]
 ```
 
 ### Cuentas administradoras
@@ -445,6 +451,8 @@ CA-25  Dado cualquier usuario
 | R-08 | El MFA de `ADMINISTRADOR` es obligatorio y no configurable, con independencia de la decisión 002-B sobre los demás roles. | Ley 25.326 art. 9 (medidas adecuadas al riesgo): una sesión de administrador comprometida expone a todos los titulares. Condición C-002-08. |
 | R-09 | La IP, la ubicación aproximada y el dispositivo de una sesión (CA-13) son datos personales tratados, con su finalidad declarada en el art. 6 (CA-26). Si su resolución depende de un tercero, ese tercero se identifica como encargado de tratamiento con contrato, y se evalúa si hay transferencia internacional. | Ley 25.326 arts. 12 y 25. Condición C-002-10. Preferencia por resolución local de IP a ubicación cuando sea posible. |
 | R-10 | La primera cuenta de administrador se crea con un script de siembra ejecutado manualmente en el despliegue, fuera de toda interfaz pública. Nunca con credenciales en una variable de entorno. | Decisión 002-C. Una variable de entorno con una contraseña, aunque se fuerce el cambio, es una ventana de tiempo con una credencial conocida. |
+| R-11 | El CUIT/CUIL se pide en el alta con una finalidad declarada y acotada: identificar de forma temprana al titular para poder iniciar sin fricción los procesos de diagnóstico de deuda (BCRA, bureaus — feature futura) en cuanto el cliente los autorice, y prevenir el alta duplicada de una misma persona bajo correos distintos. No se usa para ningún otro fin mientras esa feature no exista. | Decisión de G2 — escalamiento E-1 de `plan.md`. El product owner optó por mantener el campo en la 002 en vez de diferirlo, con esta finalidad explícita (Ley 25.326 art. 6, principio de finalidad). |
+| R-12 | El correo transaccional (confirmación de alta, recuperación, notificaciones de seguridad) se envía a través de Sendgrid. | Decisión de G2 — escalamiento E-2 de `plan.md`. **Condición:** a diferencia de la alternativa evaluada por el arquitecto (Amazon SES en una región de la Unión Europea, que no requería análisis de transferencia internacional), Sendgrid procesa datos en Estados Unidos. Antes de producción se necesita evaluar la transferencia internacional de datos (Ley 25.326 art. 12) y contar con un acuerdo de tratamiento de datos (DPA) firmado con Sendgrid — condición C-002-10 sigue abierta para este tercero específico, no cerrada. |
 
 ## 7. Casos límite y errores
 
