@@ -35,3 +35,39 @@ else
   echo "::notice::Todavía no existe packages/shared/src/motor-legal: el benchmark del motor no tiene qué medir."
 fi
 emitir "motor" "$motor"
+
+# ── Feature 002 — identidad y acceso ─────────────────────────────────────────
+# Cada salida habilita un paso del pipeline que hoy no tiene qué verificar.
+# Mismo trinquete: en cuanto el árbol aparece, el paso deja de ser opcional.
+
+# Servicio de contraseñas (`ServicioDeContrasenas` del contrato §6, ADR-024).
+# El benchmark de `argon2id` mide la implementación real del proyecto, no una
+# reimplementación del pipeline: si no hay implementación, no hay medición.
+if [ -d packages/integrations/src/identidad ] || [ -d apps/api/src/identidad ]; then
+  contrasenas="si"
+else
+  contrasenas="no"
+  echo "::notice::Todavía no hay adaptador de contraseñas (packages/integrations/src/identidad ni apps/api/src/identidad): el benchmark de argon2id no tiene qué medir (T-02 / T-05)."
+fi
+emitir "contrasenas" "$contrasenas"
+
+# API de identidad levantable: sin ella no hay caminos de no-revelación que
+# cronometrar (ADR-025, prueba estadística de temporización).
+if [ -d apps/api/src/identidad ]; then
+  identidad_api="si"
+else
+  identidad_api="no"
+  echo "::notice::Todavía no existe apps/api/src/identidad: la prueba de temporización de la no-revelación (ADR-025) queda diferida (T-05, T-06)."
+fi
+emitir "identidad_api" "$identidad_api"
+
+# Base local IP→ubicación de ADR-029. La ruta la fija `dev-integraciones` en
+# T-02; acá sólo se detecta el directorio que la contiene.
+if [ -d packages/integrations/src/identidad/ubicacion ] && \
+   [ -n "$(find packages/integrations/src/identidad/ubicacion -maxdepth 2 -type f -print -quit 2>/dev/null)" ]; then
+  base_geo="si"
+else
+  base_geo="no"
+  echo "::notice::Todavía no hay base local de geolocalización en packages/integrations/src/identidad/ubicacion (ADR-029, T-02): la actualización mensual queda preparada y en espera."
+fi
+emitir "base_geo" "$base_geo"

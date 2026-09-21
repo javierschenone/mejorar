@@ -4,28 +4,41 @@
 #
 # `specs/contratos/<contrato>.ts` es la fuente normativa: es lo que el humano
 # aprueba en G2 y sólo lo modifica el `arquitecto`.
-# `packages/shared/src/motor-legal/contrato/<version>.ts` es una copia exacta,
-# byte a byte, que mantiene `dev-dominio`.
+# `packages/<paquete>/src/<dominio>/contrato/<version>.ts` es una copia exacta,
+# byte a byte, que mantiene el agente dueño del paquete.
 #
 # Este script falla la construcción si divergen. Sin él, la copia deriva y el
 # contrato aprobado deja de significar algo (ADR-017, "cómo se revierte";
-# riesgo R-05 del plan de la feature 004).
+# riesgo R-05 del plan de la feature 004, riesgo R-11 del plan de la 002).
 #
 # Uso: ./scripts/ci/verificar-identidad-contrato.sh   (desde la raíz del repo)
 
 set -euo pipefail
 
-# Pares "fuente normativa|copia en el paquete".
-# Cuando exista v2 (ADR-017 punto 6) se agrega una línea más; los dos archivos
-# conviven mientras haya consumidores.
+# Tríos "fuente normativa|copia en el paquete|directorio que vuelve obligatoria
+# la copia".
+#
+# El tercer campo es el trinquete: mientras ese directorio no exista, el agente
+# dueño todavía no empezó y la verificación queda **pendiente** en vez de
+# fallar; en cuanto existe, la copia es obligatoria y su ausencia rompe la
+# construcción. Es lo que permite que este paso viva en el pipeline desde antes
+# de que el código se escriba, sin bloquear a nadie por lo que todavía no hay.
+#
+# Cuando exista una v2 de un contrato (ADR-017 punto 6) se agrega una línea
+# más; los dos archivos conviven mientras haya consumidores.
 PARES=(
-  "specs/contratos/motor-reglas-legales.ts|packages/shared/src/motor-legal/contrato/v1.ts"
+  # Feature 004 — motor de reglas legales (ADR-017).
+  "specs/contratos/motor-reglas-legales.ts|packages/shared/src/motor-legal/contrato/v1.ts|packages/shared/src/motor-legal"
+  # Feature 002 — identidad y acceso (ADR-017 aplicado a esta feature;
+  # obligación de frontera F-11 de `specs/002-identidad-y-acceso/plan.md` §5).
+  # La copia del dominio la mantiene `dev-dominio` (T-01).
+  "specs/contratos/identidad-y-acceso.ts|packages/shared/src/identidad/contrato/v1.ts|packages/shared/src/identidad"
+  # `packages/integrations` mantiene su propia copia del mismo contrato porque
+  # declara los puertos de ADR-029 (`package.json`, export `./identidad/contrato`).
+  # La mantiene `dev-integraciones` (T-02) y vale la misma regla: manda la
+  # fuente. Dos copias del mismo contrato son dos oportunidades de deriva.
+  "specs/contratos/identidad-y-acceso.ts|packages/integrations/src/identidad/contrato/v1.ts|packages/integrations/src/identidad"
 )
-
-# Mientras este directorio no exista, la copia todavía no fue escrita (T-01 en
-# curso) y la verificación queda pendiente en vez de fallar. En cuanto el
-# directorio del motor existe, la copia es obligatoria.
-DIR_MOTOR="packages/shared/src/motor-legal"
 
 huella() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -51,8 +64,7 @@ resumen "| Fuente normativa | Copia en el paquete | Estado |"
 resumen "| --- | --- | --- |"
 
 for par in "${PARES[@]}"; do
-  fuente="${par%%|*}"
-  copia="${par##*|}"
+  IFS='|' read -r fuente copia guardia <<< "$par"
 
   if [ ! -f "$fuente" ]; then
     echo "::error file=${fuente}::No existe la fuente normativa del contrato. Es el archivo que aprueba el humano en G2 y no puede faltar."
@@ -62,13 +74,13 @@ for par in "${PARES[@]}"; do
   fi
 
   if [ ! -f "$copia" ]; then
-    if [ -d "$DIR_MOTOR" ]; then
-      echo "::error file=${copia}::Falta la copia del contrato. El motor ya existe en ${DIR_MOTOR}, así que la copia byte a byte de ${fuente} es obligatoria (ADR-017 punto 2)."
+    if [ -d "$guardia" ]; then
+      echo "::error file=${copia}::Falta la copia del contrato. ${guardia} ya existe, así que la copia byte a byte de ${fuente} es obligatoria (ADR-017 punto 2)."
       resumen "| \`${fuente}\` | \`${copia}\` | FALTA LA COPIA |"
       fallas=$((fallas + 1))
     else
-      echo "::notice::Todavía no existe ${DIR_MOTOR}: la copia del contrato está pendiente (T-01). Verificación diferida."
-      resumen "| \`${fuente}\` | \`${copia}\` | pendiente — el motor todavía no existe |"
+      echo "::notice::Todavía no existe ${guardia}: la copia del contrato está pendiente. Verificación diferida."
+      resumen "| \`${fuente}\` | \`${copia}\` | pendiente — \`${guardia}\` todavía no existe |"
       pendientes=$((pendientes + 1))
     fi
     continue

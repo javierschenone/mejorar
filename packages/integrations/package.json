@@ -1,0 +1,44 @@
+{
+  "name": "@mejorar/integrations",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Frontera de Mejorar con el mundo exterior: puertos y adaptadores. Mock determinista por defecto, el sistema corre end to end sin una sola credencial de terceros.",
+  "license": "UNLICENSED",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./nucleo": {
+      "types": "./dist/nucleo/index.d.ts",
+      "default": "./dist/nucleo/index.js"
+    },
+    "./identidad": {
+      "types": "./dist/identidad/index.d.ts",
+      "default": "./dist/identidad/index.js"
+    },
+    "./identidad/contrato": {
+      "types": "./dist/identidad/contrato/index.d.ts",
+      "default": "./dist/identidad/contrato/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verificar:contrato": "node scripts/verificar-contrato.mjs",
+    "clean": "rm -rf dist tsconfig.build.tsbuildinfo"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "typescript": "5.9.2",
+    "vitest": "3.2.4"
+  }
+}

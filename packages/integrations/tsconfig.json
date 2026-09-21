@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "types": ["node"],
+    // Mismo criterio que `@mejorar/shared`: sólo para el chequeo de tipos, que
+    // es el único que incluye los tests. Vitest los ejecuta como módulos ES y
+    // varios usan `import.meta.url` para ubicarse en el disco (verificación de
+    // identidad del contrato, lectura de archivos de fijación). El artefacto
+    // publicado no cambia: `tsconfig.build.json` sigue emitiendo CommonJS.
+    "module": "es2022"
+  },
+  "include": ["src/**/*.ts", "vitest.config.ts"],
+  "exclude": ["dist", "node_modules"]
+}
