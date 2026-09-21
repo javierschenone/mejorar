@@ -7,7 +7,16 @@
     "noImplicitReturns": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "types": ["node"]
+    "types": ["node"],
+    // Sólo para el chequeo de tipos (`noEmit`), que es el único que incluye los
+    // tests. Vitest los ejecuta como módulos ES, así que `import.meta.url` —que
+    // usan los tests de contrato y de determinismo para ubicarse en el disco—
+    // es válido en tiempo de ejecución, pero `module: "commonjs"` de
+    // `tsconfig.base.json` lo rechaza en tiempo de chequeo (TS1343).
+    // El artefacto publicado no cambia: `tsconfig.build.json` sigue emitiendo
+    // CommonJS y excluyendo los tests, y también chequea `src/**` bajo
+    // `commonjs`, de modo que el dominio queda validado por los dos módulos.
+    "module": "es2022"
   },
   "include": ["src/**/*.ts", "vitest.config.ts"],
   "exclude": ["dist", "node_modules"]
