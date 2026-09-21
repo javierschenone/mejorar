@@ -67,9 +67,25 @@ describe('CA-32 — importes en centavos enteros, con moneda, sin punto flotante
   });
 
   it('CA-32: los centavos se serializan como cadena, nunca como número JSON', () => {
+    // 9.007.199.254.740.993 centavos (unos 90 billones de pesos) es el primer
+    // entero por encima de `Number.MAX_SAFE_INTEGER`: `number` no lo puede
+    // representar. Por eso la obligación de frontera F-06 manda que el importe
+    // viaje como **cadena** y nunca como número JSON — un `JSON.parse` que lo
+    // reciba como número le cambia el valor al importe sin avisar.
     const grande = exigirCentavos(9_007_199_254_740_993n);
     expect(centavosATexto(grande)).toBe('9007199254740993');
-    expect(Number(centavosATexto(grande))).not.toBe(9_007_199_254_740_993);
+
+    // La pérdida de precisión se demuestra volviendo a `bigint`, no comparando
+    // contra un literal `number`: escrito como literal, `9_007_199_254_740_993`
+    // ya vale 9007199254740992 y la comparación no probaría nada.
+    const rotoPorNumber = BigInt(Number(centavosATexto(grande)));
+    expect(rotoPorNumber).not.toBe(grande);
+    expect(rotoPorNumber).toBe(9_007_199_254_740_992n);
+    expect(grande - rotoPorNumber).toBe(1n); // un centavo que desaparece solo
+
+    // El ida y vuelta por cadena, en cambio, es exacto: es el contrato.
+    const reconstruido = crearCentavosDesdeTexto(centavosATexto(grande));
+    expect(reconstruido.ok && reconstruido.valor).toBe(grande);
   });
 
   it('suma y resta son exactas sobre enteros grandes', () => {
