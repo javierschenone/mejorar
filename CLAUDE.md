@@ -233,9 +233,9 @@ Fase: **tres frentes en paralelo — 004 en G3, 001 parcialmente reabierta, 002 
 
 | Feature | Compuerta | Estado |
 | --- | --- | --- |
-| 004 — Motor de reglas legales | **G3** | `tasks.md` presentado (15 tareas, 7 olas), pendiente de aprobación. G2 y todas sus condiciones/escalamientos, resueltos. |
-| 001 — Fundaciones | G1 (parcial) | v2: CA-10 retirado y acotado (ver `spec.md` §0). El resto de G2 (ADR-001 a 009, `plan.md`) sigue aprobado y sin cambios. |
-| 002 — Identidad y acceso | G1 | v3: 39 criterios, dictamen APTO CON CONDICIONES, las 5 decisiones (002-A a 002-E) resueltas. Pendiente de aprobación de G1 para pasar a G2. |
+| 004 — Motor de reglas legales | **G4** | Ola 1 implementada y verificada: `packages/shared` (74/74 tests) y `apps/api/prisma` Bloque A (53 tests contra PostgreSQL real). Pipeline funcionando. |
+| 001 — Fundaciones | G1 (parcial) | v2: CA-10 retirado y acotado. El resto de G2 sigue aprobado. |
+| 002 — Identidad y acceso | **G2** | Material completo (plan, 10 ADR, modelo de datos, UX), pendiente de aprobación. 8 escalamientos del arquitecto para el product owner. |
 
 Modalidad acordada con el product owner: **las seis compuertas, una por una.**
 Historial completo de decisiones: `specs/REGISTRO-COMPUERTAS.md`.
