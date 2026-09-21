@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 | --- | --- |
-| Versión | **2** — incorpora el dictamen de cumplimiento (APTO CON CONDICIONES, 12 condiciones) |
+| Versión | **3** — cierra las 5 decisiones de G1 (002-A a 002-E) |
 | Estado | EN REVISIÓN (G1) |
 | Autor | orquestador |
 | Revisor legal | `compliance-legal` → `specs/002-identidad-y-acceso/cumplimiento.md` (APTO CON CONDICIONES) |
@@ -161,6 +161,22 @@ CA-08  Dada una cuenta con MFA activado
        Cuando el correo y la contraseña son correctos
        Entonces el sistema exige el segundo factor antes de emitir cualquier
        token, y no revela si el primer factor fue correcto por sí solo
+
+CA-38  Dada una cuenta con rol ABOGADO                                       [v3]
+       Cuando completa su alta y su verificación profesional (CA-05)
+       Entonces el MFA es obligatorio antes de poder operar como abogado — no
+       es opcional, a diferencia de CLIENTE
+       [Decisión 002-B. El abogado está alcanzado por el secreto profesional
+       y expone a todos sus clientes asignados con una sola sesión]
+
+CA-39  Dada una cuenta con rol CLIENTE                                       [v3]
+       Entonces el MFA es opcional, pero: (a) se ofrece desde el perfil desde
+       el día uno, con explicación en lenguaje llano, nunca escondido; (b) si
+       se activa, no puede desactivarse sin reautenticación fuerte
+       [Decisión 002-B, recaudos B-1 y B-3. El recaudo B-2 — revisión
+       obligatoria de esta decisión en la feature 007, cuando el portal del
+       cliente muestre informes crediticios — queda como dependencia
+       declarada en el backlog de 007, no como CA de esta feature]
 
 CA-09  Dada una contraseña incorrecta                                       [v2]
        Cuando se reintenta más de N veces en una ventana de tiempo
@@ -428,6 +444,7 @@ CA-25  Dado cualquier usuario
 | R-07 | RBAC se evalúa por permiso concreto en cada consulta, nunca sólo por rol en el punto de entrada. | Constitución #4 y #5: un abogado no debe poder alcanzar el caso de otro cambiando un identificador en la URL. |
 | R-08 | El MFA de `ADMINISTRADOR` es obligatorio y no configurable, con independencia de la decisión 002-B sobre los demás roles. | Ley 25.326 art. 9 (medidas adecuadas al riesgo): una sesión de administrador comprometida expone a todos los titulares. Condición C-002-08. |
 | R-09 | La IP, la ubicación aproximada y el dispositivo de una sesión (CA-13) son datos personales tratados, con su finalidad declarada en el art. 6 (CA-26). Si su resolución depende de un tercero, ese tercero se identifica como encargado de tratamiento con contrato, y se evalúa si hay transferencia internacional. | Ley 25.326 arts. 12 y 25. Condición C-002-10. Preferencia por resolución local de IP a ubicación cuando sea posible. |
+| R-10 | La primera cuenta de administrador se crea con un script de siembra ejecutado manualmente en el despliegue, fuera de toda interfaz pública. Nunca con credenciales en una variable de entorno. | Decisión 002-C. Una variable de entorno con una contraseña, aunque se fuerce el cambio, es una ventana de tiempo con una credencial conocida. |
 
 ## 7. Casos límite y errores
 
@@ -472,65 +489,28 @@ CA-25  Dado cualquier usuario
   transaccional, y evaluación de transferencia internacional → identificación
   concreta en G2 (R-09, condición C-002-10). [v2]
 
-## 9. Decisiones pendientes
+## 9. Decisiones — resueltas en G1
 
-- `[NECESITA DECISIÓN 002-A: umbral y ventana de bloqueo por intentos fallidos]`
-  CA-09 exige demora creciente y bloqueo temporal, sin fijar los números.
-  Recomendación: 5 intentos, ventana de 15 minutos, bloqueo de 15 minutos con
-  demora exponencial antes de eso. Parámetro configurable, no constante.
+Las cinco decisiones quedaron resueltas por el product owner. Registradas en
+`specs/REGISTRO-COMPUERTAS.md`, entradas 040 a 043.
 
-- `[NECESITA DECISIÓN 002-B: MFA obligatorio u opcional por rol]`                [v2]
-  **El piso ya no está en discusión** (R-08, CA-32): `ADMINISTRADOR` tiene MFA
-  obligatorio y no configurable, con o sin norma que lo imponga, porque bajo
-  el estándar de adecuación al riesgo del art. 9 su sesión expone a todos los
-  titulares. Lo que queda abierto es `ABOGADO` y `CLIENTE`.
-  Opciones: **A)** opcional para ambos. **B)** obligatorio para abogado,
-  opcional para cliente. **C)** obligatorio para ambos.
-  Recomendación: **B**, con dictamen legal a favor: el abogado está alcanzado
-  por el secreto profesional y expone a todos sus clientes asignados; el
-  cliente es la audiencia con menos alfabetización digital y exigirle MFA
-  desde el día uno puede excluirlo del servicio (constitución #13, art. 8 bis
-  LDC) — no es una excusa comercial, es la misma razón por la que no se le
-  exige a nadie tener un smartphone de gama alta para acceder a su propia
-  deuda. **Recaudos si se elige B para el cliente opcional:** se ofrece desde
-  el día uno, se revisa obligatoriamente en la feature 007 cuando el portal
-  del cliente empiece a mostrar informes crediticios, y no se puede desactivar
-  sin reautenticación fuerte.
+| Decisión | Resolución | Dónde se implementa |
+| --- | --- | --- |
+| **002-A** — umbral de bloqueo | 5 intentos, ventana de 15 minutos, con los recaudos A-1/A-2. Parámetro de producto, no normativo. | CA-09, CA-36, CA-37 |
+| **002-B** — MFA por rol | `ADMINISTRADOR` obligatorio sin excepción (piso legal). `ABOGADO` obligatorio. `CLIENTE` opcional, con los recaudos B-1 a B-3. | CA-32, CA-38, CA-39 |
+| **002-C** — primera cuenta admin | Script de siembra manual en el despliegue, fuera de toda interfaz pública. Sin credenciales en variables de entorno. | R-10, CA-33, CA-34 |
+| **002-D** — baja de cuenta | Diferida a la feature **003**. La restricción de la Res. SCI 424/2020 (botón accesible desde la portada, sin requerir login) queda documentada en `specs/003-consentimientos-y-datos-personales/spec.md` cuando se escriba, para que no se pierda al pasar de una feature a otra. | Fuera de alcance §8 |
+| **002-E** — inscripción ante la AAIP | **Pospuesta.** El product owner se apartó de la recomendación de iniciarla ahora. | Riesgo de cronograma, ver abajo |
 
-- `[NECESITA DECISIÓN 002-C: quién crea la primera cuenta de administrador]`
-  Opciones: **A)** script de siembra ejecutado manualmente en el despliegue,
-  fuera de cualquier interfaz. **B)** variable de entorno con credenciales
-  iniciales que se fuerza a cambiar en el primer ingreso.
-  Recomendación: **A** — una variable de entorno con una contraseña, aunque se
-  fuerce el cambio, es una ventana de tiempo con una credencial conocida.
-  Sin objeción legal en ninguna opción; los recaudos de CA-33 y CA-34 (ninguna
-  cuenta genérica, nominalización o baja de la siembra, auditoría de la
-  creación) aplican cualquiera sea la opción elegida.
+### Riesgo de cronograma — segunda dependencia externa pospuesta
 
-- `[NECESITA DECISIÓN 002-D: baja de cuenta, ahora o diferida]`                 [v2, nueva]
-  El §7 supone cuentas eliminadas que ninguna CA de esta versión crea — un
-  defecto real que el dictamen encontró (condición C-002-05).
-  Opciones: **A)** especificar la baja en esta feature. **B)** declararla
-  explícitamente fuera de alcance y dependencia de la feature 003.
-  Restricción que aplica en cualquier caso: por la Res. SCI 424/2020, el
-  camino de baja no puede exigir haber iniciado sesión ni estar escondido
-  detrás del login — tiene que haber un botón accesible desde la portada.
-  Recomendación: **B** — evita ampliar 002 con un flujo que ya tiene dueño
-  natural en 003, siempre que la restricción de accesibilidad quede escrita
-  ahí desde ya y no se pierda.
-
-- `[NECESITA DECISIÓN 002-E: cuándo se inscribe la base ante la AAIP]`          [v2, nueva]
-  Condición C-002-11: antes de que la 002 trate datos de una persona real —
-  incluido un piloto— la base tiene que estar inscripta ante la AAIP y tiene
-  que haber un responsable de datos personales designado. No es una tarea de
-  código: es una gestión del product owner, análoga a la contratación del
-  estudio jurídico de la feature 004 (entrada 027, hoy pospuesta).
-  Opciones: **A)** iniciar la gestión ahora, en paralelo a G2/G3. **B)**
-  postergarla, con el mismo riesgo de cronograma que ya corre la 004.
-  Recomendación: **A** — a diferencia del estudio jurídico, esta gestión no
-  depende de tener código construido, así que no hay motivo real para
-  esperar, y a esta le sigue una segunda tarea (registrar el responsable en
-  `docs/03`).
+La condición C-002-11 exige la inscripción de la base ante la AAIP y la
+designación de un responsable de datos personales **antes de que la 002 trate
+datos de una persona real, incluido un piloto**. Al postergarla, el proyecto
+acumula una **segunda** dependencia externa sin fecha, junto a la del estudio
+jurídico de la feature 004 (condición C-03, entrada 027). A diferencia de esa,
+ésta no depende de tener código construido: cuando se decida arrancarla, no
+hay trabajo previo que la bloquee, sólo el tiempo de trámite en sí.
 
 ## 10. Métricas de éxito
 

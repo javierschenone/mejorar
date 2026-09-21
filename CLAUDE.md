@@ -229,22 +229,23 @@ Instalarla y mantenerla en los entornos de desarrollo es del agente `cicd`.
 
 ## 7. Estado actual
 
-Fase: **ciclo 001 + 004, compuerta G1.**
+Fase: **tres frentes en paralelo — 004 en G3, 001 parcialmente reabierta, 002 en G1.**
 
-| Compuerta | Estado |
-| --- | --- |
-| G0 — proceso, roster y backlog | **APROBADA** (2026-09-20) |
-| G1 — spec 001 Fundaciones | pendiente: 1 decisión abierta (001-A) |
-| G1 — spec 004 Motor de reglas legales | pendiente: dictamen APTO CON CONDICIONES; 004-B y CA-23 ya decididas; faltan 004-A, 004-C y 004-D |
+| Feature | Compuerta | Estado |
+| --- | --- | --- |
+| 004 — Motor de reglas legales | **G3** | `tasks.md` presentado (15 tareas, 7 olas), pendiente de aprobación. G2 y todas sus condiciones/escalamientos, resueltos. |
+| 001 — Fundaciones | G1 (parcial) | v2: CA-10 retirado y acotado (ver `spec.md` §0). El resto de G2 (ADR-001 a 009, `plan.md`) sigue aprobado y sin cambios. |
+| 002 — Identidad y acceso | G1 | v3: 39 criterios, dictamen APTO CON CONDICIONES, las 5 decisiones (002-A a 002-E) resueltas. Pendiente de aprobación de G1 para pasar a G2. |
 
 Modalidad acordada con el product owner: **las seis compuertas, una por una.**
+Historial completo de decisiones: `specs/REGISTRO-COMPUERTAS.md`.
 
-Material preexistente en el repositorio, producido antes de adoptar SDD y por lo
-tanto **sujeto a revisión** en las compuertas correspondientes:
+Riesgos de cronograma abiertos (dependencias externas, sin fecha):
+1. Firma del estudio jurídico sobre la tabla de parámetros de la 004 (condición
+   C-03, entrada 027).
+2. Inscripción de la base ante la AAIP y designación de responsable de datos,
+   antes de que la 002 trate una persona real (condición C-002-11, entrada 043).
 
-- `docs/01` a `docs/07`: documentación de visión, negocio, arquitectura,
-  cumplimiento e integraciones. Se toma como **insumo de las specs**, no como
-  spec aprobada.
-- Andamiaje raíz (`package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`,
-  `docker-compose.yml`, `.env.example`): **propuesta** pendiente de ratificación
-  por el `arquitecto` en G2 y por `cicd` en G6.
+Material preexistente en el repositorio, producido antes de adoptar SDD:
+auditado y en su mayoría ratificado por el `arquitecto` en el plan de la 001
+(ver `specs/001-fundaciones/plan.md` §3 para el veredicto archivo por archivo).
