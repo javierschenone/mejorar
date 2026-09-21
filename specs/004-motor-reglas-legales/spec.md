@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 | --- | --- |
-| Versión | **3** — incorpora los hallazgos de la verificación documental (0 de 12 en fuente oficial, 3 hallazgos que obligan a corregir el QUÉ) |
+| Versión | **4** — incorpora 3 huecos señalados por el arquitecto durante G2 (E-6) y aclara el redondeo de reclamos estimados y el alcance real de CA-35 (E-1, E-7) |
 | Estado | EN REVISIÓN (G1) |
 | Autor | orquestador |
 | Revisor legal | `compliance-legal` → `specs/004-motor-reglas-legales/cumplimiento.md` (APTO CON CONDICIONES, 12 condiciones) |
@@ -48,6 +48,21 @@ Todo esto está corroborado por buscador, no leído en fuente oficial. Se trata
 como `[C]` en el dictamen de cumplimiento: mismo nivel de exigencia que `[P]`
 a efectos del bloqueo de producción (condición C-02). **No cambia el veredicto
 ni las 12 condiciones**, que siguen intactas.
+
+## 0ter. Cambios de la versión 4
+
+Durante G2, el `arquitecto` señaló tres huecos que ningún criterio cubría
+(escalamiento E-6 de `plan.md`) y dos ambigüedades de un criterio ya aprobado
+(E-1, E-7). El product owner decidió incorporar los tres huecos como criterios
+nuevos y aclarar los otros dos sin reabrir su alcance.
+
+| Origen | Cambio |
+| --- | --- |
+| E-6(a) | CA-66 (nueva): el pacto de cuota litis exige forma escrita, sin la cual es atacable. |
+| E-6(b) | CA-65 (nueva): la interpelación fehaciente suspende por seis meses **o el plazo menor que corresponda a la prescripción de la acción**, lo que sea menor — segunda regla del art. 2541 CCyC que CA-34 no contemplaba. |
+| E-6(c) | CA-67 (nueva): los datos de cumplimiento sin mora no tienen plazo de eliminación por antigüedad; no todo dato de un informe crediticio es suprimible. |
+| E-1 | CA-32 aclarada: en un monto que el motor **le atribuye al reclamo del acreedor** (`RECLAMO_ESTIMADO`), "favorece al cliente" significa redondear **hacia abajo** — sobreestimar destruye credibilidad y, vía CA-61, no debería inflar ninguna base de comisión aunque esa base se calcule sobre resultado confirmado. |
+| E-7 | CA-35 aclarada: mientras el parámetro `dnu70_2023.fechaCorte` no esté ratificado, **todo** hallazgo de punitorios de tarjeta —anterior o posterior al DNU— devuelve INDETERMINABLE. Es más restrictivo que la lectura literal de CA-35 y se acepta así explícitamente. |
 
 ## 1. Problema
 
@@ -161,6 +176,13 @@ CA-34  Dada una interpelación fehaciente ya computada como hecho suspensivo
        Cuando se registra una segunda interpelación por la misma obligación
        Entonces no vuelve a suspender el plazo, y el resultado lo explicita
        [Defecto D-11]
+
+CA-65  Dada una interpelación fehaciente computada como hecho suspensivo        [v4]
+       Entonces la suspensión dura seis meses **o el plazo menor que
+       corresponda a la prescripción de la acción**, el que sea menor, y el
+       resultado explicita cuál de los dos se aplicó y por qué
+       [Escalamiento E-6(b). Art. 2541 CCyC, segunda regla, que CA-34 no
+        contemplaba]
 ```
 
 ### Análisis B — Topes de intereses y capitalización
@@ -186,7 +208,7 @@ CA-10  Dada una deuda de tarjeta de crédito cuya tasa compensatoria supera    [
        nombrando ese dato
        [Defecto D-13]
 
-CA-35  Dada una deuda de tarjeta con hecho posterior a la entrada en vigor
+CA-35  Dada una deuda de tarjeta con hecho posterior a la entrada en vigor    [v4]
        del DNU 70/2023, que sustituyó el artículo de la Ley 25.065 que
        contenía el tope de punitorios
        Cuando se la evalúa
@@ -195,8 +217,14 @@ CA-35  Dada una deuda de tarjeta con hecho posterior a la entrada en vigor
        período esté ratificado por un profesional
        Y para hechos anteriores a esa fecha aplica el tope que estaba vigente
        entonces, conforme CA-29
+       Y mientras el parámetro `dnu70_2023.fechaCorte` no esté ratificado por
+       un profesional, el motor **no puede distinguir** "antes" de "después":
+       en ese estado, TODO hallazgo de punitorios de tarjeta devuelve
+       INDETERMINABLE, no sólo los posteriores al DNU. Este comportamiento
+       más restrictivo que la letra del criterio se acepta explícitamente
        [Condición C-05. El estado del DNU puede cambiar durante la vida del
-        producto; el parámetro tiene vigencia desde/hasta precisamente por eso]
+        producto; el parámetro tiene vigencia desde/hasta precisamente por
+        eso. Aclaración v4, escalamiento E-7]
 
 CA-36  Dada una deuda de tarjeta en la que el titular efectuó el pago mínimo
        en los períodos correspondientes
@@ -268,6 +296,14 @@ CA-16  Dado un dato aún dentro del plazo de archivo
 
 CA-17  Dado un dato cuya caducidad ocurrirá dentro del umbral de alerta
        Entonces devuelve PROXIMO_A_CADUCAR, para poder anticipar la gestión
+
+CA-67  Dado un dato de cumplimiento SIN mora informado en un registro          [v4]
+       Cuando se evalúa su plazo de archivo
+       Entonces el motor NO le aplica ningún plazo de eliminación por
+       antigüedad: no todo dato de un informe crediticio es suprimible por el
+       paso del tiempo, sólo los datos de incumplimiento
+       [Escalamiento E-6(c). Decreto 1558/2001 art. 26: los datos de
+        cumplimiento sin mora no tienen plazo de eliminación]
 ```
 
 ### Análisis D — Embargabilidad de haberes
@@ -376,6 +412,13 @@ CA-64  Dada una indemnización u obligación regida por el artículo 277 de la  
 CA-24  Dado un caso de materia laboral
        Entonces se aplica el límite diferenciado de esa materia, no el general
 
+CA-66  Dado un pacto de cuota litis propuesto                              [v4]
+       Entonces exige forma escrita, con tantos ejemplares como partes, y un
+       pacto sin ese requisito se marca como atacable en el hallazgo, no como
+       válido
+       [Escalamiento E-6(a). Ley 27.423 art. 6: sin forma escrita el pacto es
+        impugnable]
+
 CA-25  Dado un caso en una jurisdicción provincial con ley arancelaria propia
        cargada en los parámetros
        Entonces se aplica el límite de esa jurisdicción
@@ -411,9 +454,14 @@ CA-31  Dada una misma entrada evaluada dos veces con la misma fecha de
        Entonces el resultado es idéntico (el motor es determinista y recibe la
        fecha como entrada, no la lee del reloj)
 
-CA-32  Dado un hallazgo con impacto económico
+CA-32  Dado un hallazgo con impacto económico                              [v4]
        Entonces el monto se expresa en centavos enteros, con su moneda, y el
        redondeo favorece al cliente cuando la norma no dispone otra cosa
+       Y en particular, para `RECLAMO_ESTIMADO` (lo que el motor estima que el
+       acreedor reclama), "favorece al cliente" significa redondear **hacia
+       abajo**: sobreestimar el reclamo destruye credibilidad frente al
+       acreedor y no debe inflar ninguna base de comisión
+       [Aclaración v4, escalamiento E-1]
 
 CA-58  Dado un parámetro con requiereValidacionProfesional en verdadero
        Cuando se lo intenta usar en una evaluación con entorno productivo
