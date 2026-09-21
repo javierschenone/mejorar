@@ -2,11 +2,33 @@
 
 | Campo | Valor |
 | --- | --- |
-| Estado | EN REVISIÓN (G1) |
+| Versión | **2** — retira CA-10, ver §0 |
+| Estado | EN REVISIÓN (G1) — reabierta parcialmente |
 | Autor | orquestador |
 | Revisor legal | no aplica (sin tratamiento de datos) |
 | Compuerta | G1 |
 | Principios de la constitución involucrados | #2 (spec antes que código), #4 (separación de roles), #14 (todo lo que se afirma, se prueba) |
+
+## 0. Cambios de la versión 2
+
+En G2, el `arquitecto` resolvió CA-10 acotándolo a tres afirmaciones mínimas
+sobre `Usuario` y `EventoAuditoria` (escalamiento E-02, `plan.md` §5.3). El
+product owner rechazó esa resolución: esperaba el mapa real de rol a permisos,
+perfiles de cliente y abogado con datos propios, y autenticación real (MFA,
+refresh, recuperación) — es decir, el contenido íntegro de la feature **002
+(Identidad y acceso)**, ya prevista en el backlog.
+
+**Consecuencia:** CA-10 pedía, sin saberlo, el trabajo completo de otra
+feature. La corrección no es ampliar 001 hasta cubrirlo — eso duplicaría el
+trabajo de 002 y volvería a 001 dependiente de una spec que todavía no existe
+— sino **retirar CA-10 de 001** y trasladar esa responsabilidad, íntegra, a
+002. El resto del trabajo de G2 de 001 (ADR-001 a 009, `plan.md`) **no se ve
+afectado**: ninguno dependía de un modelo de identidad real, sólo de que
+`Usuario` y `EventoAuditoria` existieran como andamiaje mínimo para probar el
+pipeline — y ese andamiaje se conserva como lo que es, infraestructura de
+prueba, no como sustituto de 002.
+
+Registrado en `specs/REGISTRO-COMPUERTAS.md`, entradas 031 a 033.
 
 ## 1. Problema
 
@@ -86,10 +108,14 @@ CA-09  Dado un commit que no respeta la convención de mensajes
        Cuando se intenta registrar
        Entonces el sistema lo advierte indicando el formato esperado
 
-CA-10  Dado el sistema levantado con datos de demostración
-       Cuando se ingresa con el usuario de demostración de cada perfil
-       (cliente, abogado, administrador)
-       Entonces cada uno ve su portal con datos coherentes y no ve los de otro
+CA-10  Dado el sistema levantado con datos de demostración                  [v2]
+       Cuando se consulta la API con el usuario de demostración
+       Entonces responde con el `EventoAuditoria` correspondiente a esa
+       consulta y no con los de otro usuario
+       [Retirado el alcance de "los tres perfiles ven su portal": eso es
+       íntegramente de la feature 002. Este criterio se limita a probar que
+       el andamiaje de auditoría de 001 (R-04, ADR-007 §4) funciona end to
+       end, sin simular un login ni un RBAC que no existen todavía. Ver §0]
 
 CA-11  Dado el archivo README del repositorio
        Cuando una persona nueva lo sigue paso a paso
@@ -123,6 +149,11 @@ CA-11  Dado el archivo README del repositorio
 - Modelo de datos del negocio: acá sólo lo mínimo para que el seed de
   demostración funcione → el modelo completo se define en cada feature.
 - Sistema de diseño visual → spec **002** en adelante, a cargo de `ux-expert`.
+- **Modelo de identidad, RBAC por permiso, perfiles de cliente/abogado, MFA,
+  refresh, recuperación de contraseña, y toda experiencia real de login** →
+  íntegramente spec **002 (Identidad y acceso)**. Retirado de 001 en la
+  versión 2 (§0). El ingreso de 001, si existe como andamiaje de prueba, no
+  simula RBAC ni perfiles: prueba únicamente que la auditoría funciona.
 
 ## 9. Decisiones pendientes
 
