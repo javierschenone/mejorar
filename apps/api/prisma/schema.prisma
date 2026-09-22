@@ -1,30 +1,56 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Esquema de base de datos de Mejorar
 //
-// Feature  : 004 — Motor de reglas legales argentinas
-// Tarea    : T-03 (specs/004-motor-reglas-legales/tasks.md)
-// Fuente   : specs/004-motor-reglas-legales/modelo-datos.md, Bloque A
-//            (aprobado en G2). Este archivo NO decide el modelo: lo transcribe.
-// Decisión : ADR-007 — PostgreSQL 16 + Prisma 6, migraciones versionadas,
-//            nunca `db push`, SQL crudo donde Prisma no llega.
+// Decisión transversal: ADR-007 — PostgreSQL 16 + Prisma 6, migraciones
+// versionadas, nunca `db push`, SQL crudo donde Prisma no llega.
 //
-// ALCANCE DE ESTE ARCHIVO HOY: Bloque A (catálogo normativo), A.1 a A.6.
-// Los bloques A.7 a A.9, B, C y D los agregan las tareas T-06 y T-09.
+// DOS ALCANCES CONVIVEN EN ESTE ARCHIVO, EN DOS ESQUEMAS SEPARADOS:
+//
+//   1. esquema `motor`  — Feature 004, Motor de reglas legales argentinas.
+//      Tarea T-03 de specs/004-motor-reglas-legales/tasks.md.
+//      Fuente: specs/004-motor-reglas-legales/modelo-datos.md, Bloque A
+//      (A.1 a A.6, aprobado en G2). Los bloques A.7 a A.9, B, C y D los
+//      agregan las tareas T-06 y T-09.
+//      SIN datos identificatorios del deudor (CA-60, condición C-10).
+//
+//   2. esquemas `acceso` y `auditoria` — Feature 002, Identidad y acceso.
+//      Tarea T-03 de specs/002-identidad-y-acceso/tasks.md.
+//      Fuente: specs/002-identidad-y-acceso/modelo-datos.md (aprobado en G2).
+//      Es exactamente lo contrario del `motor`: acá vive el correo, el nombre
+//      y la credencial. Por eso son esquemas propios, con rol propio y clave
+//      de cifrado propia (decisión D-1 de ese documento). NO se mezcla una
+//      sola tabla de la 002 dentro de `motor`.
+//
+// Ninguno de los dos alcances decide nada: este archivo transcribe los dos
+// modelos de datos aprobados.
+//
+// El esquema `identidad` existe desde la migración 0001 y **Prisma no lo
+// administra**: es de la feature 007, con otro rol y otra clave.
 //
 // LO QUE PRISMA NO EXPRESA Y VIVE EN LAS MIGRACIONES (ADR-007 §2.4):
 //   - el tipo `daterange` de `TramoParametro.vigencia` (acá, `Unsupported`);
 //   - la restricción de exclusión GiST que prohíbe vigencias solapadas (R-13);
-//   - todas las restricciones `CHECK` (R-1, R-2 y las de A.2);
-//   - los índices parciales de las consultas Q-04, Q-09;
-//   - los disparadores de inmutabilidad y la verificación diferida "todo tramo
-//     CARGADO tiene al menos una cita" (migración 0009, según modelo-datos §6.1).
+//   - TODAS las restricciones `CHECK` de los dos alcances;
+//   - los índices PARCIALES (Prisma los declara totales y la migración los
+//     reemplaza conservando el nombre);
+//   - la columna generada `acceso.Usuario.esAdministrador`;
+//   - las claves foráneas COMPUESTAS contra columnas de estado, con
+//     `ON UPDATE RESTRICT` — el mecanismo central de las invariantes de la 002;
+//   - los disparadores de restricción DIFERIDOS (R-002-03, R-002-05, R-002-06)
+//     y los de inmutabilidad de las tablas de sólo inserción;
+//   - el particionado por rango mensual de `auditoria.EventoAuditoria`;
+//   - RLS con `FORCE ROW LEVEL SECURITY` y el `REVOKE` a nivel de columna.
 // Todo eso está en `prisma/migrations/**` y explicado en `prisma/LEEME.md`.
 //
-// CLASIFICACIÓN DE SENSIBILIDAD (modelo-datos §1 y §4): cada campo lleva su
-// marca PUB / INT / PERS / PATR en el comentario de la línea. En el Bloque A no
-// hay ningún campo PATR: no hay un solo dato patrimonial del deudor en el
-// catálogo normativo — es la ley y nuestra lectura de la ley. Por lo tanto
-// tampoco hay nada cifrado ni ningún hash de búsqueda en este bloque.
+// CLASIFICACIÓN DE SENSIBILIDAD: cada campo lleva su marca
+// PUB / INT / PERS / PERS↑ / PATR en el comentario de la línea, y además como
+// `COMMENT` en la propia base — verificable por consulta, no sólo por lectura.
+// En ninguno de los dos alcances hay un solo campo PATR: ni el catálogo
+// normativo ni la identidad guardan un peso. `PERS↑` marca los campos
+// personales que llevan **tratamiento de PATR** (cifrado en reposo, nunca
+// indexados en claro) porque en este producto saber que una persona tiene
+// cuenta es una inferencia sobre su situación patrimonial
+// (002/modelo-datos §0.6 y §4.1).
 // ─────────────────────────────────────────────────────────────────────────────
 
 generator client {
@@ -37,8 +63,9 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
   // El esquema `identidad` existe (migración 0001) pero Prisma no lo administra:
-  // es de otro rol y otra clave (modelo-datos D-4 y §7.4).
-  schemas  = ["motor"]
+  // es de otro rol y otra clave (004/modelo-datos D-4 y §7.4; 002 §0.5).
+  // `acceso` y `auditoria` los agrega la feature 002 (002/modelo-datos §6.2).
+  schemas  = ["acceso", "auditoria", "motor"]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -539,4 +566,2293 @@ model CatalogoTramo {
   /// verificar la clave foránea compuesta con `ON UPDATE RESTRICT`.
   @@index([tramoId], map: "idx_catalogotramo_tramo")
   @@schema("motor")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ═══  FEATURE 002 — IDENTIDAD Y ACCESO  ══════════════════════════════════════
+// ═══  esquemas `acceso` y `auditoria`                                      ═══
+// ═══  Fuente: specs/002-identidad-y-acceso/modelo-datos.md (G2 aprobada)   ═══
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// Seis decisiones gobiernan todo lo que sigue (002/modelo-datos §0.2):
+//
+//   D-1  Esquema propio. Ni una tabla de esta feature dentro de `motor`.
+//   D-2  El estado derivable NO se almacena. No hay columna con el estado de
+//        la verificación profesional, ni con el bloqueo por intentos fallidos,
+//        ni con el vencimiento de la matrícula: se derivan en cada lectura a
+//        partir de hechos fechados (`derivarEstadoMatricula` del contrato).
+//   D-3  Hechos, no estados. C.1, C.2, B.4, D.5, G.1 y A.5 son de sólo
+//        inserción; el inventario completo de columnas mutables está en
+//        002/modelo-datos §7.2 y lo hace cumplir la migración 0021.
+//   D-4  Todo dato directamente identificatorio de la cuenta va CIFRADO en
+//        reposo (AES-256-GCM) y la búsqueda por igualdad se hace con ÍNDICE
+//        CIEGO (HMAC-SHA-256 con clave fuera de la base). Nunca en claro,
+//        nunca indexado en claro.
+//   D-5  Las invariantes críticas son ESTRUCTURALES: el estado prohibido no es
+//        representable. Claves foráneas compuestas contra columnas de estado,
+//        `CHECK`, índices únicos parciales y disparadores diferidos.
+//   D-6  Nada se borra salvo purga con constancia, y la cuenta purgada deja
+//        LÁPIDA: fila con identificador opaco y columnas personales anuladas.
+//        La bitácora tiene FK `ON DELETE RESTRICT` contra esa fila, así que es
+//        estructuralmente imposible dejarla huérfana.
+//
+// Lo que NO está acá, a propósito:
+//   - `acceso.IdentificadorFiscal` (A.2): diseñada, NO creada. La migración
+//     que la crea vive en `prisma/migraciones-en-espera/` y no se ejecuta
+//     hasta que se resuelva el escalamiento E-002-1 (finalidad del CUIT/CUIL).
+//   - `acceso.DocumentacionDeRestitucion` (E.4): NO se crea. Escalamiento
+//     E-002-2: recolectar la imagen de un DNI es el tratamiento más intrusivo
+//     de la feature y no tiene base legal escrita.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enumeraciones de `acceso`
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Conjunto de permisos por defecto (CA-18). El rol sigue siendo columna porque
+/// el mapa rol→permisos la necesita, y porque de él se deriva la columna
+/// generada `esAdministrador` que sostiene la clave foránea compuesta de F.1.
+enum Rol {
+  CLIENTE
+  ABOGADO
+  ADMINISTRADOR
+
+  @@schema("acceso")
+}
+
+/// modelo-datos A.1. **`BLOQUEADA_TEMPORALMENTE` del contrato NO es un valor
+/// almacenable y su ausencia es el diseño**: el bloqueo por intentos fallidos
+/// se aplica también a cuentas que no existen (contrato §9), y una cuenta
+/// inexistente no tiene fila donde guardarlo. Guardarlo sería un oráculo de
+/// enumeración. Vive en D.6 indexado por `claveDeTrafico` y se DERIVA al armar
+/// el `PerfilDeAutorizacion`. Escalamiento E-002-7.
+enum EstadoCuenta {
+  NO_VERIFICADA
+  ACTIVA
+  PENDIENTE_DE_INSCRIPCION_MFA
+  RESTITUCION_MFA_EN_CURSO
+  SUSPENDIDA
+  PURGADA
+
+  @@schema("acceso")
+}
+
+/// Proyección de E.1 sobre A.1, para poder expresar R-002-01 como `CHECK`.
+enum EstadoMfa {
+  NO_CONFIGURADO
+  INSCRIPCION_PENDIENTE_DE_CONFIRMACION
+  ACTIVO
+  BLOQUEADO_POR_RESTITUCION
+
+  @@schema("acceso")
+}
+
+/// Por qué se destruyeron los datos personales de la cuenta (D-6, §5.4).
+enum MotivoPurga {
+  NUNCA_CONFIRMADA
+  PEDIDO_DEL_TITULAR
+  BAJA_DE_CUENTA
+
+  @@schema("acceso")
+}
+
+/// Las 24 jurisdicciones del contrato (§5) más `FEDERAL`. Es el dato que las
+/// features 008/012/013 necesitan para el control M-7 (D-002-07).
+///
+/// NOMBRE: en la base el tipo se llama `acceso.Jurisdiccion`, como dice el
+/// modelo de datos. En el cliente de Prisma se llama `JurisdiccionProfesional`
+/// porque los nombres de enum son únicos en todo el `schema.prisma` y
+/// `motor.Jurisdiccion` (feature 004, 7 valores, otro alcance) ya ocupa el
+/// nombre. Son dos tipos distintos en dos esquemas distintos, y tiene que
+/// seguir siendo así: el enum del motor NO enumera las 24 provincias.
+enum JurisdiccionProfesional {
+  CABA
+  BUENOS_AIRES
+  CATAMARCA
+  CHACO
+  CHUBUT
+  CORDOBA
+  CORRIENTES
+  ENTRE_RIOS
+  FORMOSA
+  JUJUY
+  LA_PAMPA
+  LA_RIOJA
+  MENDOZA
+  MISIONES
+  NEUQUEN
+  RIO_NEGRO
+  SALTA
+  SAN_JUAN
+  SAN_LUIS
+  SANTA_CRUZ
+  SANTA_FE
+  SANTIAGO_DEL_ESTERO
+  TIERRA_DEL_FUEGO
+  TUCUMAN
+  FEDERAL
+
+  @@map("Jurisdiccion")
+  @@schema("acceso")
+}
+
+/// Catálogo CERRADO (modelo-datos A.4). No es texto libre: un campo libre en el
+/// perfil público de un abogado es una promesa de resultado esperando a ocurrir
+/// (constitución #6). Los tres valores son los que exhibe el perfil profesional
+/// de `specs/002-identidad-y-acceso/ux.md` §"Mi perfil". Ampliarlo es una
+/// revisión ADITIVA del enum, decidida por `ux-expert` en compuerta.
+enum Especialidad {
+  EJECUCIONES
+  DEFENSA_DEL_CONSUMIDOR
+  CONCURSOS_Y_QUIEBRAS
+
+  @@schema("acceso")
+}
+
+/// Los 25 permisos del contrato §2. Catálogo cerrado.
+///
+/// **El valor en la base es el literal del contrato, con puntos**
+/// (`'mfa.desactivar.propio'`): es lo que escribe `dev-backend` y lo que
+/// nombra el `CHECK` de A.5. El identificador de Prisma usa guiones bajos
+/// porque el DSL no admite puntos; el `@map` conserva el valor real.
+enum Permiso {
+  perfil_leer_propio                    @map("perfil.leer.propio")
+  perfil_editar_propio                  @map("perfil.editar.propio")
+  perfil_exportar_propio                @map("perfil.exportar.propio")
+  perfil_declararEspecialidades_propio  @map("perfil.declararEspecialidades.propio")
+  contrasena_cambiar_propia             @map("contrasena.cambiar.propia")
+  mfa_inscribir_propio                  @map("mfa.inscribir.propio")
+  mfa_desactivar_propio                 @map("mfa.desactivar.propio")
+  mfa_regenerarCodigosDeRespaldo_propio @map("mfa.regenerarCodigosDeRespaldo.propio")
+  sesion_listar_propia                  @map("sesion.listar.propia")
+  sesion_cerrar_propia                  @map("sesion.cerrar.propia")
+  auditoria_leer_propia                 @map("auditoria.leer.propia")
+  auditoria_leer_total                  @map("auditoria.leer.total")
+  usuario_listar                        @map("usuario.listar")
+  usuario_leer                          @map("usuario.leer")
+  usuario_crearAdministrador            @map("usuario.crearAdministrador")
+  usuario_suspender                     @map("usuario.suspender")
+  matricula_leer                        @map("matricula.leer")
+  matricula_verificar                   @map("matricula.verificar")
+  matricula_suspender                   @map("matricula.suspender")
+  restitucionMfa_solicitar_propia       @map("restitucionMfa.solicitar.propia")
+  restitucionMfa_instruir               @map("restitucionMfa.instruir")
+  restitucionMfa_aprobar                @map("restitucionMfa.aprobar")
+  caso_leer_asignado                    @map("caso.leer.asignado")
+  caso_actuar_asignado                  @map("caso.actuar.asignado")
+  caso_recibirAsignacion                @map("caso.recibirAsignacion")
+
+  @@schema("acceso")
+}
+
+enum EfectoAjuste {
+  CONCEDE
+  RETIRA
+
+  @@schema("acceso")
+}
+
+/// Catálogo cerrado del motivo de un ajuste individual de permiso (A.5). No
+/// está en el contrato del `arquitecto`; se cierra acá porque el modelo pide
+/// "motivo (enum cerrado)" y un texto libre en una tabla de privilegios es
+/// exactamente donde después no se entiende por qué alguien tenía acceso.
+enum MotivoAjustePermiso {
+  DELEGACION_TEMPORAL
+  INCIDENTE_DE_SEGURIDAD
+  PEDIDO_DEL_TITULAR
+  SANCION_INTERNA
+  CORRECCION_DE_ALTA
+  DECISION_DE_LA_PLATAFORMA
+
+  @@schema("acceso")
+}
+
+/// A.6. Qué clase de duplicado se detectó (contrato §9).
+enum ClaseDeDuplicado {
+  CORREO
+  CUIT_CUIL
+
+  @@schema("acceso")
+}
+
+enum ResultadoDeDuplicado {
+  PENDIENTE
+  DESCARTADA
+  CONFIRMADA_POR_EL_TITULAR
+
+  @@schema("acceso")
+}
+
+/// B.1. `ClaseDeDocumentoAceptable` del contrato (§10).
+enum ClaseDocumentoAceptable {
+  TERMINOS_Y_CONDICIONES
+  POLITICA_DE_PRIVACIDAD
+
+  @@schema("acceso")
+}
+
+/// B.3. Los campos que el formulario de alta puede recolectar (art. 6 inc. c).
+enum CampoDelAlta {
+  CORREO
+  CONTRASENA
+  NOMBRE_PARA_MOSTRAR
+  CUIT_CUIL
+  MATRICULA
+  JURISDICCION
+
+  @@schema("acceso")
+}
+
+/// Art. 6 inc. c) de la Ley 25.326: el carácter obligatorio o facultativo de la
+/// respuesta. Es "el que más se olvida" (dictamen §3).
+enum CaracterDelCampo {
+  OBLIGATORIO
+  FACULTATIVO
+
+  @@schema("acceso")
+}
+
+enum CanalDeAceptacion {
+  WEB
+  MOVIL
+
+  @@schema("acceso")
+}
+
+/// C.1. El resultado de la decisión, no el estado de la matrícula: el estado se
+/// deriva (D-2).
+enum ResultadoDecisionVerificacion {
+  APROBADA
+  RECHAZADA
+
+  @@schema("acceso")
+}
+
+/// C.1. `ClaseDeConstancia` del contrato (§5). Salvaguarda M-1.
+enum ClaseDeConstancia {
+  CONSTANCIA_EMITIDA_POR_EL_COLEGIO
+  CONSULTA_AL_PADRON_PUBLICO
+  CREDENCIAL_PROFESIONAL
+  OTRA
+
+  @@schema("acceso")
+}
+
+/// C.1. Catálogo cerrado de motivos de rechazo. Un rechazo sin motivo tipificado
+/// no es revisable ni reclamable por el profesional.
+enum MotivoRechazoVerificacion {
+  CONSTANCIA_ILEGIBLE
+  CONSTANCIA_VENCIDA
+  MATRICULA_NO_FIGURA_EN_EL_PADRON
+  DATOS_NO_COINCIDEN_CON_LO_DECLARADO
+  MATRICULA_SUSPENDIDA_O_CANCELADA
+  JURISDICCION_NO_COINCIDE
+  DOCUMENTACION_INSUFICIENTE
+
+  @@schema("acceso")
+}
+
+/// C.2. `MotivoDeSuspensionDeMatricula` del contrato (§5).
+enum MotivoDeSuspensionDeMatricula {
+  NOTIFICACION_DEL_COLEGIO
+  DENUNCIA_RECIBIDA
+  PEDIDO_DEL_PROFESIONAL
+  DECISION_DE_LA_PLATAFORMA
+
+  @@schema("acceso")
+}
+
+enum MotivoLevantamientoSuspension {
+  RESUELTA_POR_EL_COLEGIO
+  DENUNCIA_DESESTIMADA
+  PEDIDO_DEL_PROFESIONAL
+  ERROR_DE_LA_PLATAFORMA
+
+  @@schema("acceso")
+}
+
+/// C.3. Los tres avisos de vigencia de CA-29. La PK `(decisionId, hito)` **es**
+/// la clave de idempotencia: sin ella el proceso diario le manda el mismo
+/// correo al mismo abogado todos los días hasta que renueve (constitución #12).
+enum HitoDeVigencia {
+  POR_VENCER_30D
+  POR_VENCER_7D
+  VENCIDA
+
+  @@schema("acceso")
+}
+
+/// D.1. `NivelAutenticacion` del contrato (§3).
+enum NivelAutenticacion {
+  CONTRASENA
+  CONTRASENA_Y_SEGUNDO_FACTOR
+
+  @@schema("acceso")
+}
+
+/// D.1. Categorías cerradas: el agente de usuario crudo se analiza y se
+/// descarta, nunca se persiste (minimización, art. 4 inc. 1).
+enum DispositivoClase {
+  ESCRITORIO
+  TELEFONO
+  TABLETA
+  APLICACION_MOVIL
+  DESCONOCIDO
+
+  @@schema("acceso")
+}
+
+enum MotivoCierreSesion {
+  CIERRE_DEL_TITULAR
+  CIERRE_A_DISTANCIA
+  REUTILIZACION_DE_REFRESCO
+  CAMBIO_DE_CONTRASENA
+  VENCIMIENTO
+  SUSPENSION_DE_CUENTA
+
+  @@schema("acceso")
+}
+
+enum MotivoInvalidacionFamilia {
+  CIERRE_DE_SESION
+  REUTILIZACION_DETECTADA
+  CAMBIO_DE_CONTRASENA
+  VENCIMIENTO
+
+  @@schema("acceso")
+}
+
+/// D.4. Qué se le pide a continuación a quien se está autenticando.
+enum SiguientePasoDesafio {
+  SEGUNDO_FACTOR
+  CONFIRMAR
+
+  @@schema("acceso")
+}
+
+/// D.5. `CUENTA_INEXISTENTE` es un resultado de primera clase: el conteo se
+/// aplica también a identificadores que no existen, porque si sólo se contaran
+/// los existentes el propio bloqueo sería el oráculo de enumeración.
+enum ResultadoIntento {
+  EXITO
+  CREDENCIAL_INVALIDA
+  SEGUNDO_FACTOR_INVALIDO
+  CUENTA_INEXISTENTE
+
+  @@schema("acceso")
+}
+
+enum PropositoEnlace {
+  CONFIRMACION_DE_CORREO
+  RECUPERACION_DE_CONTRASENA
+
+  @@schema("acceso")
+}
+
+/// D.9. Los 16 valores de `ClavePlantillaCorreo` del contrato (§11).
+enum ClavePlantillaCorreo {
+  CONFIRMACION_DE_CORREO
+  INTENTO_DE_ALTA_CON_CORREO_YA_REGISTRADO
+  INTENTO_DE_ALTA_CON_CUIT_YA_REGISTRADO
+  RECUPERACION_DE_CONTRASENA
+  CONTRASENA_CAMBIADA
+  CUENTA_BLOQUEADA_TEMPORALMENTE
+  REUTILIZACION_DE_REFRESCO
+  SESION_CERRADA_A_DISTANCIA
+  SEGUNDO_FACTOR_ACTIVADO
+  SEGUNDO_FACTOR_DESACTIVADO
+  RESTITUCION_MFA_EN_CURSO
+  RESTITUCION_MFA_RESUELTA
+  MATRICULA_POR_VENCER
+  MATRICULA_VENCIDA
+  MATRICULA_SUSPENDIDA
+  CUENTA_ADMINISTRADORA_CREADA
+
+  @@schema("acceso")
+}
+
+/// D.9. `PROVEEDOR` significa que la dirección del titular sale del sistema
+/// hacia un tercero que, por el art. 25 de la Ley 25.326, es **encargado de
+/// tratamiento** y exige contrato (R-09, C-002-10).
+enum ModoEnvio {
+  MOCK
+  SMTP_LOCAL
+  PROVEEDOR
+
+  @@schema("acceso")
+}
+
+enum ResultadoEnvio {
+  ENCOLADO
+  ENVIADO
+  RECHAZADO
+  FALLIDO
+
+  @@schema("acceso")
+}
+
+/// E.3. `EstadoSolicitudRestitucion` del contrato (§8).
+enum EstadoSolicitudRestitucion {
+  RECIBIDA
+  ESPERANDO_VERIFICACION_DE_IDENTIDAD
+  EN_ESPERA_OBLIGATORIA
+  APROBADA
+  RECHAZADA
+  CANCELADA_POR_EL_TITULAR
+
+  @@schema("acceso")
+}
+
+/// E.3. `ClaseDeComprobacionDeIdentidad` del contrato (§8). El catálogo concreto
+/// y su base legal los define `compliance-legal` con el product owner: por eso
+/// `A_DEFINIR_EN_G2` sigue en la lista y por eso **E.4 no se crea**
+/// (escalamiento E-002-2). Hoy el único camino disponible es
+/// `CANAL_ALTERNATIVO_YA_REGISTRADO`.
+enum ClaseDeComprobacionDeIdentidad {
+  A_DEFINIR_EN_G2
+  CANAL_ALTERNATIVO_YA_REGISTRADO
+  VIDEOLLAMADA_CON_OPERADOR
+  DOCUMENTO_DE_IDENTIDAD
+
+  @@schema("acceso")
+}
+
+enum ResultadoVerificacionIdentidad {
+  COINCIDE
+  NO_COINCIDE
+  INSUFICIENTE
+
+  @@schema("acceso")
+}
+
+/// H.1. `A_DETERMINAR` es un estado de primera clase, no una fila ausente ni un
+/// cero. Mismo criterio que `DisponibilidadParametro` en la 004.
+enum AccionDeRetencion {
+  PURGA_FISICA
+  ANONIMIZACION
+  A_DETERMINAR
+
+  @@schema("acceso")
+}
+
+/// H.1. `ClaveDeRetencion` del contrato (§12), ampliada con las tres claves que
+/// el modelo de datos agrega (§5.1): `envioTransaccional`, `aceptacion`,
+/// `verificacionProfesional` y `cuentaDadaDeBaja`.
+enum ClaveDeRetencion {
+  cuentaNoVerificada
+  enlaceConfirmacion
+  enlaceRecuperacion
+  tokenRefrescoUsado
+  intentosFallidos
+  sesionCerrada
+  desafioDeIngreso
+  documentacionRestitucionMfa
+  bitacoraAuditoria
+  envioTransaccional
+  aceptacion
+  verificacionProfesional
+  cuentaDadaDeBaja
+
+  @@schema("acceso")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enumeraciones de `auditoria`
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Los cuatro valores de `ClasificacionDato` del contrato (§4). `NOT NULL` en
+/// G.1: un evento sin clasificación cierra el defecto D-002-10.
+enum ClasificacionDato {
+  PUBLICO
+  INTERNO
+  PERSONAL
+  PATRIMONIAL_SENSIBLE
+
+  @@schema("auditoria")
+}
+
+/// `AccionAuditada` del contrato (§4), transcripta entera y en su orden.
+/// Catálogo cerrado; agregar uno es una revisión aditiva.
+///
+/// Nota de discrepancia menor: `modelo-datos.md` G.1 dice "los **30** valores
+/// del contrato §4". El contrato (líneas 456 a 489) enumera **33**. Se
+/// transcriben los 33; la diferencia es un conteo del documento, no un cambio
+/// de alcance. Reportado al orquestador.
+enum AccionAuditada {
+  CUENTA_CREADA
+  CUENTA_CONFIRMADA
+  CUENTA_PURGADA
+  ADMINISTRADOR_CREADO
+  ADMINISTRADOR_SEMBRADO
+  ADMINISTRADOR_NOMINALIZADO
+  INGRESO_EXITOSO
+  INGRESO_FALLIDO
+  BLOQUEO_APLICADO
+  SEGUNDO_FACTOR_INSCRIPTO
+  SEGUNDO_FACTOR_DESACTIVADO
+  CODIGOS_DE_RESPALDO_REGENERADOS
+  CODIGO_DE_RESPALDO_CONSUMIDO
+  REFRESCO_ROTADO
+  REUTILIZACION_DE_REFRESCO_DETECTADA
+  SESION_CERRADA
+  TODAS_LAS_SESIONES_CERRADAS
+  CONTRASENA_CAMBIADA
+  RECUPERACION_SOLICITADA
+  RECUPERACION_COMPLETADA
+  ACEPTACION_REGISTRADA
+  MATRICULA_VERIFICADA
+  MATRICULA_RECHAZADA
+  MATRICULA_SUSPENDIDA
+  MATRICULA_VENCIDA
+  RESTITUCION_MFA_SOLICITADA
+  RESTITUCION_MFA_INSTRUIDA
+  RESTITUCION_MFA_RESUELTA
+  DOCUMENTACION_DE_RESTITUCION_DESTRUIDA
+  DATOS_PROPIOS_EXPORTADOS
+  RECURSO_LEIDO
+  RECURSO_MODIFICADO
+  ACCESO_DENEGADO
+
+  @@schema("auditoria")
+}
+
+/// `TipoRecurso` del contrato (§3).
+enum TipoRecurso {
+  USUARIO
+  PERFIL
+  SESION
+  VERIFICACION_PROFESIONAL
+  EVENTO_AUDITORIA
+  SOLICITUD_RESTITUCION_MFA
+  CREDENCIAL
+  CASO
+
+  @@schema("auditoria")
+}
+
+enum ResultadoEvento {
+  PERMITIDO
+  DENEGADO
+  EJECUTADO
+  FALLIDO
+
+  @@schema("auditoria")
+}
+
+/// `MotivoDenegacion` del contrato (§3).
+enum MotivoDenegacion {
+  PERMISO_AUSENTE
+  FUERA_DE_ALCANCE
+  CUENTA_NO_OPERATIVA
+  MATRICULA_NO_VIGENTE
+  SEGUNDO_FACTOR_REQUERIDO
+  REAUTENTICACION_REQUERIDA
+  CLASIFICACION_AUSENTE
+
+  @@schema("auditoria")
+}
+
+enum CanalDeOrigen {
+  WEB
+  MOVIL
+  API
+  PROCESO_INTERNO
+  SIEMBRA
+
+  @@schema("auditoria")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BLOQUE A — Cuenta, perfil y permisos
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// **A.1 — La cuenta.** Una fila por persona que puede autenticarse. Es la
+/// extensión del `Usuario` mínimo que el plan de la 001 §5.3 dejó escrito: los
+/// seis atributos previstos allá se conservan uno por uno (002/modelo-datos
+/// §0.3) y el único que cambia de forma es el correo, que pasa de columna en
+/// claro a cifrado con índice ciego. Es un endurecimiento, no un rediseño.
+///
+/// Es la ÚNICA tabla verdaderamente mutable de la feature (§7.2): la cuenta
+/// cambia. El historial de lo que le pasó está íntegro en la bitácora.
+model Usuario {
+  /// PERS. Identificador opaco (ULID/UUIDv7), sin estructura derivable,
+  /// producido por la aplicación. Es el `IdUsuario` del contrato. `PERS` por
+  /// precaución: no dice nada por sí solo, pero es la clave de reidentificación.
+  id String @id
+
+  /// INT. HMAC-SHA-256 del correo normalizado (NFKC + minúsculas) con clave
+  /// FUERA de la base. Es lo único indexable. No reversible. Anulable sólo
+  /// porque la lápida lo anula (invariante 3).
+  indiceCiegoCorreo Bytes?
+
+  /// PERS↑. AES-256-GCM, clave `k_acceso`, AAD = `id`.
+  correoCifrado Bytes?
+
+  /// INT. Rotación de clave sin tocar el dato (§4.3).
+  correoNonce Bytes?
+
+  /// INT.
+  correoTag Bytes?
+
+  /// INT.
+  correoIdClave String?
+
+  /// PERS↑. Ídem. SIN índice: en la 002 no hay ninguna consulta que busque por
+  /// nombre (§3, índices descartados).
+  nombreParaMostrarCifrado Bytes?
+
+  /// INT.
+  nombreParaMostrarNonce Bytes?
+
+  /// INT.
+  nombreParaMostrarTag Bytes?
+
+  /// INT.
+  nombreParaMostrarIdClave String?
+
+  /// PERS. Formato PHC de `argon2id` con los parámetros embebidos, sobre la
+  /// contraseña ya pimentada con HMAC (contrato §6). Nunca descifrable, nunca
+  /// exportable: `REVOKE SELECT` a nivel de columna en la migración 0020.
+  hashContrasena String?
+
+  /// INT.
+  rol Rol
+
+  /// INT. **Columna GENERADA** `GENERATED ALWAYS AS (rol = 'ADMINISTRADOR')
+  /// STORED`. Prisma no expresa columnas generadas: la migración 0012 la
+  /// convierte. Es el destino de la clave foránea compuesta de F.1 (R-002-03),
+  /// y por ser generada un `UPDATE rol` la mueve y la clave foránea lo rechaza.
+  ///
+  /// El `@default(dbgenerated(...))` NO es lo que crea la columna —la crea la
+  /// migración, como `GENERATED ALWAYS … STORED`— sino lo que hace que el
+  /// cliente de Prisma la trate como **opcional al escribir** y la omita del
+  /// `INSERT`. Sin eso, `prisma.usuario.create()` exigiría un valor y
+  /// PostgreSQL rechazaría la sentencia con "cannot insert a non-DEFAULT value
+  /// into column": la tabla de cuentas sería inescribible desde el cliente.
+  /// Escribirla explícitamente sigue fallando, y está bien que falle.
+  esAdministrador Boolean @default(dbgenerated("(\"rol\" = 'ADMINISTRADOR')"))
+
+  /// INT.
+  estadoCuenta EstadoCuenta
+
+  /// INT. Proyección de E.1 para poder expresar R-002-01 como `CHECK`.
+  estadoMfa EstadoMfa @default(NO_CONFIGURADO)
+
+  /// INT. Momento de la confirmación del correo (CA-01, CA-28).
+  confirmadoEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT.
+  actualizadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT. Lápida de CA-28 y de la 003 (§5.4).
+  purgadaEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  motivoPurga MotivoPurga?
+
+  /// INT. Baja lógica. **Ningún camino de la 002 la escribe**: existe para que
+  /// la 003 no tenga que alterar la tabla.
+  eliminadoEn DateTime? @db.Timestamptz(6)
+
+  perfilProfesional         PerfilProfesional?
+  ajustesRecibidos          AjustePermiso[]              @relation("AjusteSobreUsuario")
+  ajustesOtorgados          AjustePermiso[]              @relation("AjusteOtorgadoPor")
+  duplicadosComoTitular     ResolucionDeDuplicado[]      @relation("DuplicadoTitularReal")
+  duplicadosComoSecundaria  ResolucionDeDuplicado[]      @relation("DuplicadoAltaSecundaria")
+  aceptaciones              AceptacionRegistrada[]
+  decisionesTomadas         DecisionDeVerificacion[]     @relation("DecisionDecididaPor")
+  suspensionesDispuestas    SuspensionDeMatricula[]      @relation("SuspensionDispuestaPor")
+  suspensionesLevantadas    SuspensionDeMatricula[]      @relation("SuspensionLevantadaPor")
+  escalamientosResueltos    EscalamientoDeVerificacion[] @relation("EscalamientoResueltoPor")
+  sesiones                  Sesion[]
+  familiasDeRefresco        FamiliaDeRefresco[]
+  desafios                  DesafioDeIngreso[]
+  intentos                  IntentoDeAutenticacion[]
+  enlaces                   EnlaceDeUnSoloUso[]
+  envios                    EnvioTransaccional[]
+  secretoTotp               SecretoTotp?
+  codigosDeRespaldo         CodigoDeRespaldo[]
+  restitucionesComoTitular  SolicitudDeRestitucionMfa[]  @relation("RestitucionTitular")
+  restitucionesInstruidas   SolicitudDeRestitucionMfa[]  @relation("RestitucionInstruidaPor")
+  restitucionesAprobadas    SolicitudDeRestitucionMfa[]  @relation("RestitucionAprobadaPor")
+  restitucionesVerificadas  SolicitudDeRestitucionMfa[]  @relation("RestitucionVerificadaPor")
+  designacion               DesignacionDeAdministrador?  @relation("DesignacionDelUsuario")
+  designacionesCreadas      DesignacionDeAdministrador[] @relation("DesignacionCreadaPor")
+  eventosComoSujeto         EventoAuditoria[]            @relation("EventoSujeto")
+  eventosComoTitularAfectado EventoAuditoria[]           @relation("EventoTitularAfectado")
+
+  /// Destino de las claves foráneas compuestas de A.3, D.1 y E.1. No aporta
+  /// unicidad por sí misma (`id` ya es PK): es el mecanismo de R-002-02 y
+  /// R-002-16. Con `ON UPDATE RESTRICT` del otro lado, degradar el rol de una
+  /// cuenta que tiene perfil, sesión o secreto TOTP **falla en el motor**.
+  @@unique([id, rol], map: "uq_usuario_id_rol")
+  /// Destino de la clave foránea compuesta de F.1 (R-002-03). Sobre la columna
+  /// GENERADA: no se puede dejar de ser administrador sin borrar antes la
+  /// designación.
+  @@unique([id, esAdministrador], map: "uq_usuario_id_esadmin")
+  /// Q-01. El índice real es **UNIQUE PARCIAL** (`WHERE purgadaEn IS NULL`) y
+  /// lo crea la migración: un correo, una cuenta viva. Parcial para que la
+  /// lápida no bloquee un alta futura con el mismo correo, que es un derecho
+  /// del titular tras una baja.
+  @@index([indiceCiegoCorreo], map: "uq_usuario_correo")
+  /// Q-15 (CA-28). El índice real es PARCIAL
+  /// (`WHERE estadoCuenta = 'NO_VERIFICADA'`): cuentas nunca confirmadas más
+  /// viejas que el plazo, para la purga diaria.
+  @@index([creadoEn], map: "idx_usuario_sin_confirmar")
+  /// Q-18 (CA-22): panel de gestión de usuarios, filtrado por rol y estado.
+  @@index([rol, estadoCuenta, creadoEn(sort: Desc)], map: "idx_usuario_panel")
+  @@schema("acceso")
+}
+
+/// **A.3 — Lo propio del rol `ABOGADO`.** 1:1 opcional con `Usuario`.
+///
+/// No hay ninguna columna con el estado de la verificación: el estado se deriva
+/// con `derivarEstadoMatricula` (contrato §5) a partir de los hechos del
+/// Bloque C y del instante de evaluación (D-2). `ultimaDecisionId` y
+/// `tieneVerificacionAprobada` son punteros al último hecho, no el estado
+/// derivado: no dependen del tiempo, así que no pueden quedar desactualizados
+/// respecto de él.
+model PerfilProfesional {
+  /// PERS.
+  usuarioId String @id
+
+  /// INT. Réplica sostenida por clave foránea compuesta contra
+  /// `Usuario(id, rol)` con `ON UPDATE RESTRICT`, más
+  /// `CHECK (rolDelTitular = 'ABOGADO')`. Un perfil profesional colgando de un
+  /// cliente **no es representable**.
+  rolDelTitular Rol
+
+  /// PERS. **En claro y con índice, a propósito.** Es dato de publicidad
+  /// registral del colegio y su finalidad es la identificabilidad: cifrarlo
+  /// impediría verificarlo. Mismo criterio que `motor.MatriculaProfesional`.
+  matricula String
+
+  /// PERS. Lo que necesita el control M-7 de la asignación de casos
+  /// (features 008/012/013, D-002-07).
+  jurisdiccion JurisdiccionProfesional
+
+  /// PERS. Lo que DECLARÓ el abogado. El colegio **verificado** vive en la
+  /// evidencia de C.1, que es otra cosa.
+  colegioDeclarado String?
+
+  /// INT. `HistoriaDeVerificacion.solicitadaEn` del contrato. Arranca el reloj
+  /// de CA-31.
+  solicitadaEn DateTime @db.Timestamptz(6)
+
+  /// INT. Proyección para poder indexar (Q-00, Q-10), no estado derivado.
+  ultimaDecisionId String?
+
+  /// INT. Ídem. La mantiene el disparador de la migración 0021 desde C.1.
+  tieneVerificacionAprobada Boolean @default(false)
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  titular        Usuario                      @relation(fields: [usuarioId, rolDelTitular], references: [id, rol], onDelete: Restrict, onUpdate: Restrict, map: "fk_perfil_usuario_rol")
+  ultimaDecision DecisionDeVerificacion?      @relation("PerfilUltimaDecision", fields: [ultimaDecisionId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_perfil_ultima_decision")
+  especialidades EspecialidadDeclarada[]
+  decisiones     DecisionDeVerificacion[]     @relation("DecisionDelPerfil")
+  suspensiones   SuspensionDeMatricula[]
+  hitos          HitoDeVigenciaNotificado[]
+  escalamientos  EscalamientoDeVerificacion[]
+
+  /// Unicidad del par replicado. Prisma la exige para poder declarar la
+  /// relación 1:1 con clave foránea compuesta; en la base es redundante con la
+  /// PK, y se deja porque es barata (una fila por abogado) y porque hace
+  /// explícito a nivel de esquema que el par `(cuenta, rol)` es único.
+  @@unique([usuarioId, rolDelTitular], map: "uq_perfil_usuario_rol")
+  /// **R-002-18.** El índice real es UNIQUE **PARCIAL**
+  /// (`WHERE tieneVerificacionAprobada`): dos cuentas pueden *declarar* la
+  /// misma matrícula —el §7 de la spec exige que el alta no falle en el acto—
+  /// pero **sólo una puede estar verificada**.
+  @@index([jurisdiccion, matricula], map: "uq_perfil_matricula_verificada")
+  /// Q-00: parte del `PerfilDeAutorizacion` de cada petición autenticada.
+  @@index([ultimaDecisionId], map: "idx_perfil_ultima_decision")
+  /// Q-10 (CA-31). El índice real es PARCIAL (`WHERE ultimaDecisionId IS
+  /// NULL`): el tamaño del índice es el de la cola, no el del padrón.
+  @@index([solicitadaEn], map: "idx_perfil_pendiente")
+  @@schema("acceso")
+}
+
+/// **A.4 — Especialidades declaradas por el abogado** (CA-24).
+model EspecialidadDeclarada {
+  /// PERS.
+  usuarioId String
+
+  /// PERS. Enum CERRADO, no texto libre: constitución #6.
+  especialidad Especialidad
+
+  /// PERS.
+  declaradaEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// PERS. Baja lógica: la declaración no se borra.
+  retiradaEn DateTime? @db.Timestamptz(6)
+
+  perfil PerfilProfesional @relation(fields: [usuarioId], references: [usuarioId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([usuarioId, especialidad])
+  @@schema("acceso")
+}
+
+/// **A.5 — Ajuste individual de permiso** (`AjusteDePermiso` del contrato §2).
+/// Sólo inserción salvo `revocadoEn`.
+model AjustePermiso {
+  /// INT.
+  id String @id
+
+  /// PERS.
+  usuarioId String
+
+  /// INT.
+  permiso Permiso
+
+  /// INT.
+  efecto EfectoAjuste
+
+  /// PERS. Quién lo otorgó. Un privilegio sin responsable no es auditable.
+  otorgadoPor String
+
+  /// INT.
+  momento DateTime @db.Timestamptz(6)
+
+  /// INT.
+  vigenciaHasta DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  motivo MotivoAjustePermiso
+
+  /// INT.
+  revocadoEn DateTime? @db.Timestamptz(6)
+
+  /// INT. Constitución #12.
+  claveIdempotencia String @unique(map: "uq_ajuste_idempotencia")
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  usuario   Usuario @relation("AjusteSobreUsuario", fields: [usuarioId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  otorgante Usuario @relation("AjusteOtorgadoPor", fields: [otorgadoPor], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Q-00: ajustes vivos del sujeto de la petición. El índice real es PARCIAL
+  /// (`WHERE revocadoEn IS NULL`).
+  @@index([usuarioId], map: "idx_ajuste_vivo")
+  /// Sostiene la clave foránea contra el otorgante y la consulta
+  /// "qué privilegios repartió esta persona".
+  @@index([otorgadoPor], map: "idx_ajuste_otorgante")
+  @@schema("acceso")
+}
+
+/// **A.6 — Resolución de un duplicado** (contrato §9). Es lo que hace que CA-02
+/// y CA-04 no terminen en un callejón sin salida (C-002-06) y que el aviso no
+/// se duplique (constitución #12).
+model ResolucionDeDuplicado {
+  /// INT.
+  id String @id
+
+  /// INT.
+  clase ClaseDeDuplicado
+
+  /// PERS.
+  titularReal String
+
+  /// PERS. Anulable: en el caso `CORREO` **no se crea** una segunda cuenta.
+  altaSecundaria String?
+
+  /// INT.
+  notificadoAlTitularEn DateTime @db.Timestamptz(6)
+
+  /// INT.
+  resultado ResultadoDeDuplicado @default(PENDIENTE)
+
+  /// INT.
+  resueltaEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  claveIdempotencia String @unique(map: "uq_duplicado_idempotencia")
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  titular   Usuario  @relation("DuplicadoTitularReal", fields: [titularReal], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  secundaria Usuario? @relation("DuplicadoAltaSecundaria", fields: [altaSecundaria], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Los duplicados abiertos de un titular, para no volver a avisarle.
+  @@index([titularReal], map: "idx_duplicado_titular")
+  @@schema("acceso")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BLOQUE B — Información del art. 6 y aceptación versionada
+// Implementa C-002-01 y C-002-02: lo único que el dictamen §9 marca como
+// "no se puede reparar después".
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// **B.1 — Versión de un documento aceptable.** Sólo inserción.
+model VersionDocumentoAceptable {
+  /// PUB.
+  clase ClaseDocumentoAceptable
+
+  /// PUB.
+  version String
+
+  /// PUB. SHA-256 del texto exacto mostrado.
+  hashDelTexto String
+
+  /// PUB. Ubicación del documento íntegro.
+  referenciaDelTexto String
+
+  /// PUB.
+  vigenteDesde DateTime @db.Timestamptz(6)
+
+  /// PUB.
+  vigenteHasta DateTime? @db.Timestamptz(6)
+
+  /// PUB. **R-002-07: esta columna existe para no poder ser verdadera.**
+  /// `CHECK (incluyeFinalidadesDeLa003 = false)` es el espejo en la base del
+  /// literal `false` del contrato (§10). El día que alguien quiera meter la
+  /// consulta a bureaus, la cesión a terceros o las comunicaciones comerciales
+  /// dentro de los términos generales, el `INSERT` falla y el cambio tiene que
+  /// pasar por compuerta. Defensa concreta contra el art. 37 de la Ley 24.240
+  /// y contra desactivar de hecho el control de consentimiento de la 003.
+  incluyeFinalidadesDeLa003 Boolean @default(false)
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  aceptaciones AceptacionRegistrada[]
+
+  @@id([clase, version])
+  @@schema("acceso")
+}
+
+/// **B.2 — Versión del texto del art. 6 de la Ley 25.326** (CA-26, C-002-01).
+/// Sólo inserción.
+model VersionInformacionArt6 {
+  /// PUB.
+  version String @id
+
+  /// PUB. SHA-256 del texto exacto mostrado.
+  hashDelTexto String
+
+  /// PUB. Art. 6 inc. b): identidad del responsable.
+  responsableRazonSocial String
+
+  /// PUB. Art. 6 inc. b): domicilio del responsable.
+  responsableDomicilio String
+
+  /// PUB. Art. 6 inc. a) y d): a quién pueden comunicarse los datos.
+  destinatarios String[]
+
+  /// PUB. Art. 6 inc. e): cómo se ejercen acceso, rectificación y supresión.
+  canalDeEjercicioDeDerechos String
+
+  /// PUB.
+  vigenteDesde DateTime @db.Timestamptz(6)
+
+  /// PUB.
+  vigenteHasta DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  campos       CampoDeclaradoEnElAlta[]
+  aceptaciones AceptacionRegistrada[]
+
+  @@schema("acceso")
+}
+
+/// **B.3 — Un campo del formulario de alta, declarado en el art. 6.**
+///
+/// Es el inciso c) —"el que más se olvida" (dictamen §3)— convertido en
+/// restricción: el disparador diferido de la migración 0021 impide que una
+/// `VersionInformacionArt6` quede vigente sin una fila por **cada** campo que
+/// el formulario recolecte. Es también el enganche formal de E-002-1: mientras
+/// el CUIT/CUIL no tenga fila acá con su finalidad y su carácter, A.2 no se
+/// habilita. Sólo inserción.
+model CampoDeclaradoEnElAlta {
+  /// PUB.
+  version String
+
+  /// PUB.
+  campo CampoDelAlta
+
+  /// PUB. Art. 6 inc. c).
+  caracter CaracterDelCampo
+
+  /// PUB. Clave de la finalidad declarada del tratamiento de ese campo.
+  claveDeFinalidad String
+
+  /// PUB. Qué pasa si el titular no lo da. Inc. c), segunda mitad.
+  consecuenciaDeNoDarlo String
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  informacion VersionInformacionArt6 @relation(fields: [version], references: [version], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([version, campo])
+  @@schema("acceso")
+}
+
+/// **B.4 — La aceptación registrada.** Sólo inserción salvo `revocadaEn`.
+///
+/// **R-002-06 — la aceptación no puede ser un booleano.** Tres capas:
+/// (a) no existe ninguna columna booleana de aceptación en todo el esquema;
+/// (b) el disparador diferido de A.1 impide que una cuenta llegue a `ACTIVA`
+/// sin una fila de cada clase de documento; (c) una prueba de esquema recorre
+/// `information_schema.columns` y falla si aparece una columna booleana con
+/// nombre de aceptación o consentimiento.
+model AceptacionRegistrada {
+  /// INT.
+  id String @id
+
+  /// PERS.
+  usuarioId String
+
+  /// PUB. Clave foránea COMPUESTA contra B.1: no se puede aceptar una versión
+  /// que no existe.
+  documentoClase ClaseDocumentoAceptable
+
+  /// PUB.
+  documentoVersion String
+
+  /// INT. Se **copia** acá además de estar en B.1. Si mañana alguien corrige
+  /// una errata en el catálogo, la prueba de qué vio esta persona sigue siendo
+  /// esta fila.
+  hashDelTextoMostrado String
+
+  /// INT.
+  momento DateTime @db.Timestamptz(6)
+
+  /// PERS↑. **Cifrada y recuperable, NO hasheada**, y no es una inconsistencia
+  /// con `Sesion.ipHash`: acá la IP es prueba de una firma electrónica que por
+  /// la Ley 25.506 no goza de presunción de validez —la carga de acreditarla es
+  /// nuestra—. Un HMAC sólo prueba una IP que ya se conoce de antemano, lo que
+  /// en un litigio es inútil. Cifrada, se puede exhibir.
+  ipCifrada Bytes
+
+  /// INT.
+  ipNonce Bytes
+
+  /// INT.
+  ipTag Bytes
+
+  /// INT.
+  ipIdClave String
+
+  /// INT.
+  canal CanalDeAceptacion
+
+  /// INT. Identificador de la casilla concreta que se marcó.
+  casillaMarcada String
+
+  /// PUB. Qué texto del art. 6 se le mostró (CA-26).
+  versionInformacionArt6 String
+
+  /// INT. La revocación se registra; la fila nunca se borra.
+  revocadaEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  usuario     Usuario                   @relation(fields: [usuarioId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  documento   VersionDocumentoAceptable @relation(fields: [documentoClase, documentoVersion], references: [clase, version], onDelete: Restrict, onUpdate: Restrict, map: "fk_aceptacion_documento")
+  informacion VersionInformacionArt6    @relation(fields: [versionInformacionArt6], references: [version], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Una persona acepta una versión una vez. Sin esto, "¿aceptó?" tiene varias
+  /// respuestas posibles y la prueba de CA-27 se vuelve un conteo.
+  @@unique([usuarioId, documentoClase, documentoVersion], map: "uq_aceptacion_titular_documento")
+  /// Q-21 (CA-25, CA-27): aceptaciones de un titular, para prueba y exportación.
+  @@index([usuarioId, momento(sort: Desc)], map: "idx_aceptacion_titular")
+  /// Sostiene la clave foránea compuesta contra B.1.
+  @@index([documentoClase, documentoVersion], map: "idx_aceptacion_documento")
+  /// Sostiene la clave foránea contra B.2.
+  @@index([versionInformacionArt6], map: "idx_aceptacion_art6")
+  @@schema("acceso")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BLOQUE C — Verificación profesional y su vigencia
+// TODO ESTE BLOQUE ES DE SÓLO INSERCIÓN. No hay ninguna columna de estado de
+// verificación: el estado se deriva con `derivarEstadoMatricula` a partir de
+// estos hechos y del instante de evaluación (D-2).
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// **C.1 — Una decisión de verificación.** Corregir una decisión equivocada es
+/// emitir otra: la tabla no admite `UPDATE` ni `DELETE`.
+model DecisionDeVerificacion {
+  /// INT.
+  id String @id
+
+  /// PERS.
+  perfilUsuarioId String
+
+  /// INT.
+  momento DateTime @db.Timestamptz(6)
+
+  /// INT.
+  resultado ResultadoDecisionVerificacion
+
+  /// INT. **R-002-09**: `CHECK ((resultado = 'APROBADA') = (vigenciaHasta IS
+  /// NOT NULL))`. *Un "verificado" sin fecha de vencimiento no es
+  /// representable.* Traducción literal de CA-05 y de la salvaguarda M-6.
+  vigenciaHasta DateTime? @db.Date
+
+  /// PERS. Quién aprobó.
+  decididaPor String
+
+  /// PERS. Evidencia en claro: el documento vive en el almacén de objetos, acá
+  /// están su referencia y su SHA-256 (salvaguarda M-1).
+  evidenciaColegio String?
+
+  /// PERS.
+  evidenciaJurisdiccion JurisdiccionProfesional?
+
+  /// PERS.
+  evidenciaNumeroDeMatricula String?
+
+  /// PERS. Anulable aun en aprobadas: no todo colegio lo usa.
+  evidenciaTomoYFolio String?
+
+  /// INT.
+  evidenciaClaseDeConstancia ClaseDeConstancia?
+
+  /// INT.
+  evidenciaFechaDeLaConstancia DateTime? @db.Date
+
+  /// INT. Identificador en el almacén de objetos.
+  evidenciaReferenciaDelDocumento String?
+
+  /// INT. SHA-256. Sin esto, "vi la constancia" es una afirmación sin prueba.
+  evidenciaHuellaDocumento String?
+
+  /// INT.
+  motivoRechazo MotivoRechazoVerificacion?
+
+  /// INT. Constitución #12: una doble aprobación por doble clic no debe crear
+  /// dos decisiones.
+  claveIdempotencia String @unique(map: "uq_decision_idempotencia")
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  perfil    PerfilProfesional          @relation("DecisionDelPerfil", fields: [perfilUsuarioId], references: [usuarioId], onDelete: Restrict, onUpdate: Restrict)
+  decisor   Usuario                    @relation("DecisionDecididaPor", fields: [decididaPor], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  perfilesQueLaApuntan PerfilProfesional[] @relation("PerfilUltimaDecision")
+  hitos     HitoDeVigenciaNotificado[]
+
+  /// Q-11: historia completa de un perfil (CA-05, CA-22, habeas data). Sirve
+  /// además el `DISTINCT ON (perfilUsuarioId) ... ORDER BY momento DESC` de Q-09.
+  @@index([perfilUsuarioId, momento(sort: Desc)], map: "idx_decision_perfil")
+  /// Q-09 (CA-29): matrículas cuya vigencia vence en N días o ya venció. El
+  /// índice real es PARCIAL (`WHERE resultado = 'APROBADA'`).
+  @@index([vigenciaHasta], map: "idx_decision_vigencia")
+  /// Sostiene la clave foránea contra el decisor.
+  @@index([decididaPor], map: "idx_decision_decisor")
+  @@schema("acceso")
+}
+
+/// **C.2 — Suspensión de matrícula.** Sólo inserción salvo las tres columnas de
+/// levantamiento.
+///
+/// **El "efecto inmediato" de CA-30 no lo garantiza una tarea ni un cierre
+/// masivo de sesiones: lo garantiza la AUSENCIA DE CACHÉ.** El token de acceso
+/// no lleva permisos (contrato §7), así que `derivarPermisos` corre en cada
+/// petición y lee las suspensiones abiertas. El instante en que se inserta esta
+/// fila es el instante en que el abogado pierde `caso.leer.asignado`,
+/// `caso.actuar.asignado` y `caso.recibirAsignacion`. Ésta es la razón concreta
+/// por la que D-2 no es una preferencia estética: con un estado almacenado y
+/// una tarea nocturna, CA-30 sería falso durante un promedio de doce horas.
+model SuspensionDeMatricula {
+  /// INT.
+  id String @id
+
+  /// PERS.
+  perfilUsuarioId String
+
+  /// INT.
+  desde DateTime @db.Timestamptz(6)
+
+  /// PERS.
+  dispuestaPor String
+
+  /// INT.
+  motivo MotivoDeSuspensionDeMatricula
+
+  /// INT.
+  referenciaDocumento String?
+
+  /// INT.
+  levantadaEn DateTime? @db.Timestamptz(6)
+
+  /// PERS.
+  levantadaPor String?
+
+  /// INT.
+  motivoLevantamiento MotivoLevantamientoSuspension?
+
+  /// INT.
+  claveIdempotencia String @unique(map: "uq_suspension_idempotencia")
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  perfil    PerfilProfesional @relation(fields: [perfilUsuarioId], references: [usuarioId], onDelete: Restrict, onUpdate: Restrict)
+  disponente Usuario          @relation("SuspensionDispuestaPor", fields: [dispuestaPor], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  levantante Usuario?         @relation("SuspensionLevantadaPor", fields: [levantadaPor], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Q-00. El índice real es UNIQUE **PARCIAL** (`WHERE levantadaEn IS NULL`):
+  /// a lo sumo una suspensión abierta por perfil. Evita el empate entre dos
+  /// filas abiertas con criterios distintos.
+  @@index([perfilUsuarioId], map: "uq_suspension_abierta")
+  /// Q-11: historia de suspensiones de un perfil.
+  @@index([perfilUsuarioId, desde(sort: Desc)], map: "idx_suspension_perfil")
+  /// Sostienen las claves foráneas contra quien dispuso y quien levantó.
+  @@index([dispuestaPor], map: "idx_suspension_disponente")
+  @@index([levantadaPor], map: "idx_suspension_levantante")
+  @@schema("acceso")
+}
+
+/// **C.3 — Aviso de vigencia ya enviado.** Sólo inserción.
+///
+/// Existe por una sola razón, y es la constitución #12: sin esta tabla el
+/// proceso diario que busca matrículas por vencer le manda el mismo correo al
+/// mismo abogado todos los días hasta que renueve. **La PK es la clave de
+/// idempotencia.**
+model HitoDeVigenciaNotificado {
+  /// PERS.
+  perfilUsuarioId String
+
+  /// INT.
+  decisionId String
+
+  /// INT.
+  hito HitoDeVigencia
+
+  /// INT.
+  notificadoEn DateTime @db.Timestamptz(6)
+
+  /// INT. FK contra D.9; la agrega la migración 0015, cuando existe D.9.
+  envioId String
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  perfil   PerfilProfesional      @relation(fields: [perfilUsuarioId], references: [usuarioId], onDelete: Restrict, onUpdate: Restrict)
+  decision DecisionDeVerificacion @relation(fields: [decisionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  envio    EnvioTransaccional     @relation(fields: [envioId], references: [claveDeIdempotencia], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([decisionId, hito])
+  /// Los avisos ya emitidos a un perfil.
+  @@index([perfilUsuarioId], map: "idx_hito_perfil")
+  /// Sostiene la clave foránea contra el envío.
+  @@index([envioId], map: "idx_hito_envio")
+  @@schema("acceso")
+}
+
+/// **C.4 — Escalamiento por plazo de revisión vencido** (CA-31).
+/// La `claveIdempotencia` es `perfilUsuarioId` + la fecha de vencimiento del
+/// plazo: no se escala dos veces lo mismo.
+///
+/// **Dependencia declarada con la 004.** CA-31 habla de DÍAS HÁBILES. El
+/// calendario ya está diseñado —`motor.DiaNoHabil`, Bloque E de la 004— y este
+/// modelo NO lo duplica: el proceso lo lee con un `GRANT SELECT` acotado a
+/// `rol_acceso`. Duplicarlo garantizaría que los dos se desincronicen.
+model EscalamientoDeVerificacion {
+  /// INT.
+  id String @id
+
+  /// PERS.
+  perfilUsuarioId String
+
+  /// INT.
+  generadoEn DateTime @db.Timestamptz(6)
+
+  /// INT. Días hábiles transcurridos al momento de escalar (CA-31).
+  diasHabilesTranscurridos Int
+
+  /// INT.
+  resueltoEn DateTime? @db.Timestamptz(6)
+
+  /// PERS.
+  resueltoPor String?
+
+  /// INT.
+  claveIdempotencia String @unique(map: "uq_escalamiento_idempotencia")
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  perfil   PerfilProfesional @relation(fields: [perfilUsuarioId], references: [usuarioId], onDelete: Restrict, onUpdate: Restrict)
+  resolutor Usuario?         @relation("EscalamientoResueltoPor", fields: [resueltoPor], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Cola de escalamientos abiertos. El índice real es PARCIAL
+  /// (`WHERE resueltoEn IS NULL`).
+  @@index([generadoEn], map: "idx_escalamiento_abierto")
+  /// Sostienen las claves foráneas.
+  @@index([perfilUsuarioId], map: "idx_escalamiento_perfil")
+  @@index([resueltoPor], map: "idx_escalamiento_resolutor")
+  @@schema("acceso")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BLOQUE D — Sesión, tokens, anti-abuso y envíos
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// **D.1 — La sesión.**
+///
+/// **R-002-16**: una sesión de `ADMINISTRADOR` o `ABOGADO` con nivel
+/// `CONTRASENA` no es representable. Se sostiene con la clave foránea compuesta
+/// `(usuarioId, rolDelTitular) → Usuario(id, rol)` y un `CHECK` sobre el par.
+/// Es la segunda barrera de CA-32 y CA-38: aunque alguien lograra saltear la
+/// primera, **la sesión no se puede insertar**.
+model Sesion {
+  /// INT. `IdSesion`, opaco.
+  id String @id
+
+  /// PERS.
+  usuarioId String
+
+  /// INT. Réplica sostenida por clave foránea compuesta, `ON UPDATE RESTRICT`.
+  rolDelTitular Rol
+
+  /// INT.
+  creadaEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT.
+  ultimoUso DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT. `auth_time` del token. Es lo que hace verificable el recaudo B-3:
+  /// la ventana de reautenticación fuerte para apagar el segundo factor.
+  autenticadaEn DateTime @db.Timestamptz(6)
+
+  /// INT.
+  nivelAutenticacion NivelAutenticacion
+
+  /// PERS. HMAC-SHA-256 con clave de servidor. **La IP en claro no se guarda
+  /// nunca en esta tabla.** Sirve para correlacionar, no para exhibir.
+  ipHash Bytes?
+
+  /// PERS. En claro: es lo que CA-13 le muestra al titular. Resolución LOCAL
+  /// obligatoria (contrato §13, `fuente: 'BASE_LOCAL'`): no hay tercero, no hay
+  /// cesión, no hay transferencia internacional por esta vía. Granularidad
+  /// gruesa a propósito.
+  ubicacionPais String?
+
+  /// PERS.
+  ubicacionProvincia String?
+
+  /// INT. Para poder explicar por qué en marzo decía "Santa Fe".
+  versionBaseGeoIp String?
+
+  /// PERS.
+  dispositivoClase DispositivoClase @default(DESCONOCIDO)
+
+  /// PERS. Categorías, no el agente de usuario crudo: el agente se analiza y
+  /// se descarta (contrato §13). Minimización, art. 4 inc. 1.
+  dispositivoSistema String?
+
+  /// PERS.
+  dispositivoNavegador String?
+
+  /// INT.
+  cerradaEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  motivoCierre MotivoCierreSesion?
+
+  titular   Usuario             @relation(fields: [usuarioId, rolDelTitular], references: [id, rol], onDelete: Restrict, onUpdate: Restrict, map: "fk_sesion_usuario_rol")
+  familias  FamiliaDeRefresco[]
+
+  /// Q-04 (CA-13) y Q-05 (CA-11, CA-16). El índice real es PARCIAL
+  /// (`WHERE cerradaEn IS NULL`): las sesiones abiertas son una fracción mínima
+  /// del histórico.
+  @@index([usuarioId, ultimoUso(sort: Desc)], map: "idx_sesion_abierta")
+  /// Q-16: sesiones cerradas más viejas que el plazo, para purgar. Índice
+  /// PARCIAL (`WHERE cerradaEn IS NOT NULL`).
+  @@index([cerradaEn], map: "idx_sesion_cerrada")
+  /// NO hay índice sobre `ipHash`, a propósito: la investigación por IP no está
+  /// entre los 39 criterios y un índice ahí facilitaría justo la correlación
+  /// masiva que la minimización desalienta (§3, índices descartados).
+  @@schema("acceso")
+}
+
+/// **D.2 — Familia de tokens de refresco.** Una por sesión; la rotación avanza
+/// la generación dentro de la familia.
+model FamiliaDeRefresco {
+  /// INT. `IdFamiliaRefresco`.
+  id String @id
+
+  /// INT.
+  sesionId String
+
+  /// PERS.
+  usuarioId String
+
+  /// INT.
+  creadaEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT.
+  generacionActual Int @default(0)
+
+  /// INT. Al escribirla, el disparador de la migración 0021 revoca todos los
+  /// tokens vivos de la familia.
+  invalidadaEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  motivoInvalidacion MotivoInvalidacionFamilia?
+
+  sesion  Sesion            @relation(fields: [sesionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usuario Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  tokens  TokenDeRefresco[]
+
+  /// Familias de una sesión, para invalidarlas al cerrarla.
+  @@index([sesionId], map: "idx_familia_sesion")
+  /// Familias vivas de una cuenta (CA-11: cerrar todo).
+  @@index([usuarioId], map: "idx_familia_usuario")
+  @@schema("acceso")
+}
+
+/// **D.3 — Token de refresco.** Todo `INT`: no hay dato personal acá, sólo
+/// material criptográfico.
+///
+/// **R-002-13, CA-10 y CA-11 — la rotación es atómica en la base, no en el
+/// servicio.** El canje se hace con una sola sentencia:
+/// `UPDATE "TokenDeRefresco" SET "usadoEn" = now() WHERE "familiaId" = $1 AND
+/// "hashDelSecreto" = $2 AND "usadoEn" IS NULL AND "revocadoEn" IS NULL
+/// RETURNING "id"`. Si devuelve una fila, se rota. Si devuelve cero y la fila
+/// existe, **es reutilización**. Dos peticiones concurrentes con el mismo token
+/// no pueden ganar las dos porque el `UPDATE` condicional serializa. Que esto
+/// sea una comparación-e-intercambio del motor y no un `SELECT` seguido de un
+/// `UPDATE` es la diferencia entre CA-11 cumplido y una condición de carrera
+/// explotable.
+model TokenDeRefresco {
+  /// INT.
+  id String @id
+
+  /// INT.
+  familiaId String
+
+  /// INT.
+  generacion Int
+
+  /// INT. HMAC-SHA-256 del secreto. El token viaja como
+  /// `<idFamilia>.<secreto>` (contrato §7) y el secreto en claro sólo existe
+  /// en tránsito. No exportable: `REVOKE SELECT` de columna en la 0020.
+  hashDelSecreto Bytes
+
+  /// INT.
+  emitidoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT.
+  venceEn DateTime @db.Timestamptz(6)
+
+  /// INT.
+  usadoEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  sucesorId String? @unique(map: "uq_refresco_sucesor")
+
+  /// INT.
+  revocadoEn DateTime? @db.Timestamptz(6)
+
+  familia    FamiliaDeRefresco @relation(fields: [familiaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sucesor    TokenDeRefresco?  @relation("LinajeDeRefresco", fields: [sucesorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  predecesor TokenDeRefresco?  @relation("LinajeDeRefresco")
+
+  /// Q-03: canjear un token de refresco. La consulta más frecuente del bloque.
+  @@unique([familiaId, hashDelSecreto], map: "uq_refresco_familia_hash")
+  /// Un token por generación dentro de la familia.
+  @@unique([familiaId, generacion], map: "uq_refresco_familia_generacion")
+  /// Q-17: tokens vencidos, para purgar.
+  @@index([venceEn], map: "idx_refresco_vence")
+  @@schema("acceso")
+}
+
+/// **D.4 — Desafío de ingreso.**
+///
+/// **`usuarioId` es anulable a propósito.** El contrato (§8) exige que el
+/// desafío se emita SIEMPRE, exista o no la cuenta: si sólo hubiera fila para
+/// las cuentas existentes, la ausencia de desafío sería la señal que CA-08 y
+/// R-05 prohíben dar. Una fila con `usuarioId NULL` es un desafío señuelo, y es
+/// funcionalmente necesaria.
+model DesafioDeIngreso {
+  /// INT.
+  id String @id
+
+  /// PERS.
+  usuarioId String?
+
+  /// PERS. HMAC del correo o del CUIT/CUIL normalizado. No reversible.
+  claveDeTrafico Bytes
+
+  /// INT.
+  siguientePaso SiguientePasoDesafio
+
+  /// INT. Métodos de segundo factor admitidos (`TOTP`,
+  /// `CODIGO_DE_RESPALDO`). Lista cerrada de texto: el enum del contrato tiene
+  /// dos valores y no justifica un tipo propio en la base.
+  metodosAdmitidos String[]
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT.
+  venceEn DateTime @db.Timestamptz(6)
+
+  /// INT.
+  consumidoEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  intentosDeSegundoFactor Int @default(0)
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Desafíos vivos de una clave de tráfico.
+  @@index([claveDeTrafico], map: "idx_desafio_trafico")
+  /// Purga por vencimiento (retención `desafioDeIngreso`).
+  @@index([venceEn], map: "idx_desafio_vence")
+  /// Sostiene la clave foránea contra la cuenta, cuando existe.
+  @@index([usuarioId], map: "idx_desafio_usuario")
+  @@schema("acceso")
+}
+
+/// **D.5 — Intento de autenticación.** Sólo inserción.
+///
+/// **La clave es `claveDeTrafico`, no `usuarioId`** (contrato §9): el conteo y
+/// el bloqueo se aplican también a identificadores que no existen, porque si
+/// sólo se contaran los existentes el propio bloqueo sería el oráculo de
+/// enumeración que R-05 prohíbe.
+model IntentoDeAutenticacion {
+  /// INT.
+  id BigInt @id @default(autoincrement())
+
+  /// PERS.
+  claveDeTrafico Bytes
+
+  /// INT.
+  ocurridoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT.
+  resultado ResultadoIntento
+
+  /// PERS. HMAC. Nunca la IP en claro.
+  ipHash Bytes?
+
+  /// PERS. Anulable: el intento contra una cuenta inexistente no tiene a quién
+  /// apuntar, y ése es precisamente el caso que hay que contar.
+  usuarioId String?
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Q-06 (CA-09): intentos fallidos de una clave de tráfico dentro de la
+  /// ventana. Se consulta en CADA intento de ingreso.
+  @@index([claveDeTrafico, ocurridoEn(sort: Desc)], map: "idx_intento_trafico")
+  /// Purga por vencimiento (retención `intentosFallidos`, 7 días).
+  @@index([ocurridoEn], map: "idx_intento_ocurrido")
+  /// Sostiene la clave foránea contra la cuenta, cuando existe.
+  @@index([usuarioId], map: "idx_intento_usuario")
+  @@schema("acceso")
+}
+
+/// **D.6 — Bloqueo por intentos fallidos** (CA-09, CA-37). Los umbrales
+/// (5 intentos / 15 min / 15 min) viven en H.3, no en el código.
+///
+/// **El bloqueo NO cuelga de `Usuario`, y es deliberado.** CA-36 y el recaudo
+/// A-1 exigen que el bloqueo nunca inhabilite la recuperación de contraseña;
+/// eso es la AUSENCIA de una consulta y ninguna restricción puede exigirlo. Lo
+/// que sí hace el modelo es no darle a nadie la tentación de acoplarlas: el
+/// bloqueo no aparece al leer la cuenta.
+model BloqueoDeTrafico {
+  /// PERS.
+  claveDeTrafico Bytes @id
+
+  /// INT.
+  aplicadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT. Q-07: ¿hay bloqueo vigente para esta clave? Lo sirve la PK.
+  hasta DateTime @db.Timestamptz(6)
+
+  /// INT.
+  intentosContados Int
+
+  /// INT.
+  notificadoEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  envioId String?
+
+  envio EnvioTransaccional? @relation(fields: [envioId], references: [claveDeIdempotencia], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Sostiene la clave foránea contra el envío del aviso.
+  @@index([envioId], map: "idx_bloqueo_envio")
+  @@schema("acceso")
+}
+
+/// **D.7 — Enlace de un solo uso** (CA-06, CA-15, CA-16, CA-17).
+///
+/// **R-002-14**: mismo canje atómico que D.3
+/// (`UPDATE … WHERE usadoEn IS NULL AND invalidadoEn IS NULL RETURNING`), que
+/// es lo que hace que "la segunda vez no funciona" sea verdad bajo
+/// concurrencia y no sólo en el camino feliz.
+model EnlaceDeUnSoloUso {
+  /// INT.
+  id String @id
+
+  /// PERS.
+  usuarioId String
+
+  /// INT.
+  proposito PropositoEnlace
+
+  /// INT. HMAC-SHA-256. No exportable.
+  hashDelSecreto Bytes @unique(map: "uq_enlace_hash")
+
+  /// INT.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT.
+  venceEn DateTime @db.Timestamptz(6)
+
+  /// INT.
+  usadoEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  invalidadoEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  envioId String
+
+  /// INT.
+  claveIdempotencia String @unique(map: "uq_enlace_idempotencia")
+
+  usuario Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  envio   EnvioTransaccional @relation(fields: [envioId], references: [claveDeIdempotencia], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Enlaces vivos de un titular: al completar una recuperación (CA-16) se
+  /// invalidan todos en la misma transacción.
+  @@index([usuarioId], map: "idx_enlace_usuario")
+  /// Q-17: enlaces vencidos, para purgar.
+  @@index([venceEn], map: "idx_enlace_vence")
+  /// Sostiene la clave foránea contra el envío.
+  @@index([envioId], map: "idx_enlace_envio")
+  @@schema("acceso")
+}
+
+/// **D.8 — Buzones de rol prohibidos** (R-002-04, CA-33).
+///
+/// Es lo que permite que el rechazo de buzones genéricos sea una restricción de
+/// la base y no sólo una validación, **a pesar de que el correo está cifrado**:
+/// como el índice ciego es determinista, se precalculan los buzones de rol
+/// conocidos de nuestros dominios y quedan prohibidos aunque la base no pueda
+/// leer el correo. Su límite —sólo cubre la lista enumerada— está declarado en
+/// §7.3 y se cubre con validación de dominio en `packages/shared`.
+model CorreoDeRolProhibido {
+  /// INT.
+  indiceCiego Bytes @id
+
+  /// INT. `admin@`, `soporte@`, `info@`, `contacto@`, `noreply@`, …
+  etiqueta String
+
+  /// INT.
+  agregadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  @@schema("acceso")
+}
+
+/// **D.9 — Envío transaccional.** La PK **es** la clave de idempotencia
+/// (constitución #12): es la última línea de defensa contra el aviso duplicado,
+/// que en esta feature significa alarmar dos veces a alguien diciéndole que
+/// intentaron entrar a su cuenta.
+///
+/// **No guarda la dirección de destino.** Se resuelve descifrando A.1 en el
+/// momento del envío. Un registro de envíos con las direcciones en claro sería
+/// la misma lista de deudores que D-4 vino a proteger, con otro nombre.
+model EnvioTransaccional {
+  /// INT. Q-22.
+  claveDeIdempotencia String @id
+
+  /// INT.
+  plantilla ClavePlantillaCorreo
+
+  /// PERS.
+  usuarioId String?
+
+  /// INT.
+  encoladoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT.
+  enviadoEn DateTime? @db.Timestamptz(6)
+
+  /// INT. `PROVEEDOR` = la dirección sale hacia un tercero que por el art. 25
+  /// de la Ley 25.326 es encargado de tratamiento y exige contrato (R-09,
+  /// C-002-10). Identificar el proveedor concreto y su instrumento es del
+  /// `arquitecto` y de `compliance-legal`, no de este modelo.
+  modo ModoEnvio
+
+  /// INT.
+  idDelProveedor String?
+
+  /// INT.
+  resultado ResultadoEnvio @default(ENCOLADO)
+
+  /// INT.
+  intentos Int @default(0)
+
+  usuario  Usuario?                   @relation(fields: [usuarioId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  bloqueos BloqueoDeTrafico[]
+  enlaces  EnlaceDeUnSoloUso[]
+  hitos    HitoDeVigenciaNotificado[]
+
+  /// Envíos de un titular; purga por retención `envioTransaccional`.
+  @@index([usuarioId], map: "idx_envio_usuario")
+  @@index([encoladoEn], map: "idx_envio_encolado")
+  @@schema("acceso")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BLOQUE E — Segundo factor
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// **E.1 — Secreto TOTP.**
+///
+/// **R-002-02 — el MFA del administrador no se puede apagar por datos.**
+/// `CHECK (rolDelTitular NOT IN ('ADMINISTRADOR','ABOGADO') OR desactivadoEn IS
+/// NULL)` combinado con la clave foránea compuesta `ON UPDATE RESTRICT`: la
+/// fila que representa "administrador con MFA desactivado" **no existe**, y
+/// además no se puede degradar el rol para conseguirlo (cambiar `Usuario.rol`
+/// estando el par replicado acá hace fallar el `UPDATE`).
+///
+/// Cuatro capas, y la tercera y la cuarta son las que hacen que CA-32 diga
+/// "no configurable" con propiedad:
+///   1. `ExigeSegundoFactor<'ADMINISTRADOR'>` es el literal `true` (contrato).
+///   2. `mapaRolPermisos.ADMINISTRADOR` no contiene `mfa.desactivar.propio`.
+///   3. El `CHECK` de A.1 (cuenta admin/abogado `ACTIVA` exige `estadoMfa` ACTIVO).
+///   4. El `CHECK` + la clave foránea compuesta de acá, y el `CHECK` de A.5.
+/// Una variable de entorno no atraviesa ninguna de las dos últimas.
+model SecretoTotp {
+  /// PERS.
+  usuarioId String @id
+
+  /// INT. Réplica sostenida por clave foránea compuesta. **No es
+  /// desnormalización por comodidad: es el mecanismo de R-002-02.**
+  rolDelTitular Rol
+
+  /// PERS↑. AES-256-GCM con clave **propia y distinta**, `k_mfa`, AAD =
+  /// `usuarioId`. Que `k_mfa` sea otra clave que `k_acceso` es lo que impide
+  /// que un compromiso de identidades se convierta además en suplantación.
+  /// No exportable: `REVOKE SELECT` de columna en la 0020.
+  secretoCifrado Bytes
+
+  /// INT.
+  secretoNonce Bytes
+
+  /// INT.
+  secretoTag Bytes
+
+  /// INT.
+  secretoIdClave String
+
+  /// INT.
+  estado EstadoMfa
+
+  /// INT.
+  inscriptoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT. Inscripción en dos pasos: el secreto no vale hasta probar un código.
+  confirmadoEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  desactivadoEn DateTime? @db.Timestamptz(6)
+
+  /// INT. Número de paso TOTP ya usado. Impide el replay del mismo código
+  /// dentro de su ventana de 30 s.
+  ultimoPasoConsumido BigInt?
+
+  titular Usuario @relation(fields: [usuarioId, rolDelTitular], references: [id, rol], onDelete: Restrict, onUpdate: Restrict, map: "fk_totp_usuario_rol")
+
+  /// Ídem A.3: unicidad del par replicado, exigida por Prisma para la relación
+  /// 1:1 con clave foránea compuesta.
+  @@unique([usuarioId, rolDelTitular], map: "uq_totp_usuario_rol")
+  @@schema("acceso")
+}
+
+/// **E.2 — Código de respaldo.** Regenerar crea un lote nuevo e invalida el
+/// anterior en la misma transacción. Se muestran una sola vez y no son
+/// exportables (`ClaveSecretaProhibidaEnExportacion` del contrato).
+model CodigoDeRespaldo {
+  /// INT.
+  id String @id
+
+  /// PERS.
+  usuarioId String
+
+  /// INT.
+  loteId String
+
+  /// INT. HMAC-SHA-256 con **sal por código** (contrato §8).
+  hashDelCodigo Bytes
+
+  /// INT.
+  generadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT.
+  consumidoEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  invalidadoEn DateTime? @db.Timestamptz(6)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([usuarioId, hashDelCodigo], map: "uq_codigo_usuario_hash")
+  /// Q-20 (CA-08, CA-35): códigos disponibles de una cuenta. El índice real es
+  /// PARCIAL (`WHERE consumidoEn IS NULL AND invalidadoEn IS NULL`).
+  @@index([usuarioId], map: "idx_codigo_vivo")
+  @@schema("acceso")
+}
+
+/// **E.3 — Solicitud de restitución del segundo factor** (CA-35).
+///
+/// **R-002-20, cuatro ojos.** `CHECK (instruidaPor IS NULL OR aprobadaPor IS
+/// NULL OR instruidaPor <> aprobadaPor)` y `CHECK (estado <> 'APROBADA' OR
+/// (instruidaPor IS NOT NULL AND aprobadaPor IS NOT NULL))`. Dos personas
+/// distintas, o la solicitud no se puede aprobar: restituirle el segundo factor
+/// a un administrador es, de hecho, tomar control de la cuenta más poderosa del
+/// sistema, y una sola persona no debe poder hacerlo.
+///
+/// **E.4 `DocumentacionDeRestitucion` NO EXISTE** (escalamiento E-002-2). Acá
+/// se registra la **constancia del hecho** —que hubo una comprobación, de qué
+/// clase, con qué resultado, y que la documentación se destruyó— nunca el dato.
+model SolicitudDeRestitucionMfa {
+  /// INT.
+  id String @id
+
+  /// PERS.
+  titularId String
+
+  /// INT.
+  estado EstadoSolicitudRestitucion
+
+  /// INT.
+  solicitadaEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT. Demora obligatoria: le da al titular legítimo tiempo de reaccionar si
+  /// la restitución la pidió un atacante.
+  esperaHasta DateTime? @db.Timestamptz(6)
+
+  /// PERS.
+  instruidaPor String?
+
+  /// PERS.
+  aprobadaPor String?
+
+  /// INT. Catálogo con `A_DEFINIR_EN_G2` todavía dentro: E-002-2.
+  verificacionClase ClaseDeComprobacionDeIdentidad?
+
+  /// PERS.
+  verificacionPor String?
+
+  /// INT.
+  verificacionMomento DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  verificacionResultado ResultadoVerificacionIdentidad?
+
+  /// INT. Constancia **del hecho**, no del dato.
+  documentacionDestruidaEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  resueltaEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  claveIdempotencia String @unique(map: "uq_restitucion_idempotencia")
+
+  titular    Usuario  @relation("RestitucionTitular", fields: [titularId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  instructor Usuario? @relation("RestitucionInstruidaPor", fields: [instruidaPor], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  aprobador  Usuario? @relation("RestitucionAprobadaPor", fields: [aprobadaPor], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  verificador Usuario? @relation("RestitucionVerificadaPor", fields: [verificacionPor], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Q-19 (CA-35): solicitudes abiertas. El índice real es PARCIAL
+  /// (`WHERE resueltaEn IS NULL`).
+  @@index([solicitadaEn], map: "idx_restitucion_abierta")
+  /// Sostienen las cuatro claves foráneas.
+  @@index([titularId], map: "idx_restitucion_titular")
+  @@index([instruidaPor], map: "idx_restitucion_instructor")
+  @@index([aprobadaPor], map: "idx_restitucion_aprobador")
+  @@index([verificacionPor], map: "idx_restitucion_verificador")
+  @@schema("acceso")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BLOQUE F — Cuentas administradoras nominadas (C-002-09, recaudos C-1 a C-3)
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// **F.1 — Designación de administrador.**
+///
+/// Cinco mecanismos, ninguno suficiente por sí solo, que juntos hacen imposible
+/// una cuenta `ADMINISTRADOR` sin persona identificada:
+///
+///  1. **Clave foránea compuesta** `(usuarioId, esAdministrador) →
+///     Usuario(id, esAdministrador)` con `ON UPDATE RESTRICT`, más
+///     `CHECK (esAdministrador)`. Una designación sólo puede apuntar a un
+///     administrador, y un usuario con designación no puede dejar de serlo.
+///  2. **Participación total en el otro sentido**: un `CONSTRAINT TRIGGER …
+///     DEFERRABLE INITIALLY DEFERRED` sobre `Usuario` verifica al cierre de la
+///     transacción que todo `rol = 'ADMINISTRADOR'` tiene fila acá. Es la mitad
+///     que una clave foránea no puede expresar, y la que hace verdadero a CA-33.
+///  3. **Auditoría en la misma transacción (CA-34)**: el mismo disparador exige
+///     un `auditoria.EventoAuditoria` con acción `ADMINISTRADOR_CREADO` o
+///     `ADMINISTRADOR_SEMBRADO` y `titularAfectado` = el nuevo usuario. Crear un
+///     administrador sin dejar rastro no es una regla que se pueda olvidar: es
+///     una transacción que no cierra. Cierra el defecto D-002-06.
+///  4. **Buzones genéricos (R-002-04)**: disparador contra D.8, por índice ciego.
+///  5. **Una sola siembra, para siempre**: índice único parcial sobre
+///     `(esSiembra) WHERE esSiembra`, más el disparador que exige que la siembra
+///     esté nominalizada o deshabilitada antes de la segunda designación
+///     (recaudo C-2: no queda viva "por las dudas").
+model DesignacionDeAdministrador {
+  /// PERS.
+  usuarioId String @id
+
+  /// INT. Réplica; destino de la clave foránea compuesta. `CHECK
+  /// (esAdministrador)`.
+  esAdministrador Boolean
+
+  /// PERS↑. El nombre REAL de la persona, no el "nombre para mostrar". Es el
+  /// único lugar de la feature donde se guarda el nombre legal, además del
+  /// nombre para mostrar. Base legal: ejecución del contrato laboral o de
+  /// servicios y **responsabilidad identificable frente a un habeas data** —una
+  /// bitácora que dice que "admin" accedió a un expediente no prueba nada
+  /// (recaudo C-1). Va cifrado igual, porque la lista de administradores de la
+  /// plataforma es un objetivo de ingeniería social.
+  nombreCompletoCifrado Bytes
+
+  /// INT.
+  nombreCompletoNonce Bytes
+
+  /// INT.
+  nombreCompletoTag Bytes
+
+  /// INT.
+  nombreCompletoIdClave String
+
+  /// INT. El acto por el cual esta persona es administradora.
+  documentoDeDesignacionReferencia String
+
+  /// INT. SHA-256.
+  huellaDocumentoDesignacion String
+
+  /// PERS. `NULL` **sólo** si `esSiembra`: `CHECK ((creadoPor IS NULL) =
+  /// esSiembra)`.
+  creadoPor String?
+
+  /// INT.
+  esSiembra Boolean @default(false)
+
+  /// INT.
+  creadaEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT. Recaudo C-2.
+  nominalizadaEn DateTime? @db.Timestamptz(6)
+
+  /// INT. Recaudo C-2.
+  deshabilitadaEn DateTime? @db.Timestamptz(6)
+
+  /// INT.
+  claveIdempotencia String @unique(map: "uq_designacion_idempotencia")
+
+  administrador Usuario  @relation("DesignacionDelUsuario", fields: [usuarioId, esAdministrador], references: [id, esAdministrador], onDelete: Restrict, onUpdate: Restrict, map: "fk_designacion_usuario_admin")
+  creador       Usuario? @relation("DesignacionCreadaPor", fields: [creadoPor], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Mecanismo 5. El índice real es UNIQUE **PARCIAL**
+  /// (`WHERE "esSiembra"`): a lo sumo UNA fila de siembra en toda la vida de
+  /// la base.
+  @@index([esSiembra], map: "uq_designacion_siembra")
+  /// Ídem A.3: unicidad del par replicado, exigida por Prisma para la relación
+  /// 1:1 con clave foránea compuesta.
+  @@unique([usuarioId, esAdministrador], map: "uq_designacion_usuario_admin")
+  /// Sostiene la clave foránea contra quien creó la designación.
+  @@index([creadoPor], map: "idx_designacion_creador")
+  @@schema("acceso")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BLOQUE G — Bitácora de auditoría (esquema `auditoria`)
+// Extiende el `EventoAuditoria` que el plan de la 001 §5.3 dejó escrito, con
+// lo que esa feature difirió expresamente a ésta: taxonomía cerrada de
+// acciones, `titularAfectado`, clasificación, retención y encadenamiento de
+// hashes (002/modelo-datos §0.3).
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// **G.1 — Evento de auditoría.** Inmutable y PARTICIONADA por rango mensual
+/// sobre `momento`. Prisma no expresa el particionado: lo crea la migración
+/// 0018, con 12 particiones adelantadas y una rutina de creación. La retención
+/// se ejecuta **soltando particiones**, no con borrados masivos.
+///
+/// Dos decisiones de integridad que resuelven el punto más delicado del modelo:
+///
+/// - **`sujeto` y `titularAfectado` SÍ tienen clave foránea, con `ON DELETE
+///   RESTRICT`.** Es el mecanismo, no un detalle: el motor de base **impide
+///   borrar físicamente una cuenta mientras tenga un evento en la bitácora**.
+///   La única salida es la lápida de §5.4. La bitácora no puede quedar huérfana
+///   porque el `DELETE` falla (R-002-11).
+/// - **`origenSesionId` NO tiene clave foránea.** Las sesiones se purgan a los
+///   90 días; una clave foránea contra una tabla purgable obligaría a elegir
+///   entre no purgar y borrar auditoría. Se guarda por valor.
+///
+/// **Inmutabilidad (R-002-12).** `REVOKE UPDATE, DELETE` más disparador
+/// `BEFORE UPDATE OR DELETE` que lanza excepción. El `REVOKE` no alcanza contra
+/// alguien con acceso de escritura a la base: para eso está el sello de G.2.
+model EventoAuditoria {
+  /// INT. Opaco. PK COMPUESTA con `momento` porque la tabla está particionada
+  /// por `momento` y PostgreSQL exige que la clave primaria de una tabla
+  /// particionada incluya la clave de partición.
+  id String
+
+  /// INT. Monótona. La asigna la base con una secuencia propia; es lo que el
+  /// sello de Merkle de G.2 recorre.
+  secuencia BigInt @default(autoincrement())
+
+  /// INT. Clave de partición (rango mensual).
+  momento DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT.
+  accion AccionAuditada
+
+  /// PERS. **Quién actuó.** `NULL` en acciones del sistema.
+  sujeto String?
+
+  /// PERS. **Sobre los datos de quién.** Indexado. Sin esta columna no se puede
+  /// responder "quién miró mi información" (dictamen §4.1, advertencia 2), y
+  /// agregarla después obliga a reprocesar la bitácora entera.
+  titularAfectado String?
+
+  /// INT.
+  tipoRecurso TipoRecurso?
+
+  /// INT. Identificador opaco.
+  idRecurso String?
+
+  /// INT. `NOT NULL`. Cierra el defecto D-002-10 (R-002-22).
+  clasificacion ClasificacionDato
+
+  /// INT.
+  permisoEvaluado Permiso?
+
+  /// INT.
+  resultado ResultadoEvento
+
+  /// INT.
+  motivo MotivoDenegacion?
+
+  /// INT. **Por valor, sin clave foránea.** Ver la nota del modelo.
+  origenSesionId String?
+
+  /// PERS. HMAC. Nunca la IP en claro. Mismo criterio que la 004.
+  origenIpHash Bytes?
+
+  /// PERS.
+  origenDispositivoClase DispositivoClase?
+
+  /// INT.
+  origenCanal CanalDeOrigen
+
+  /// INT.
+  idCorrelacion String
+
+  /// INT. Pares clave/valor **cerrados** (`DatoDeEvento` del contrato).
+  /// Prohibido el texto libre: es la vía por la que un dato patrimonial se
+  /// filtra a una tabla que nadie cifra. Un `CHECK` valida la forma —arreglo de
+  /// objetos con `clave` de texto y `valor` escalar o nulo—.
+  datos Json @default("[]") @db.JsonB
+
+  sujetoUsuario   Usuario? @relation("EventoSujeto", fields: [sujeto], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  titularUsuario  Usuario? @relation("EventoTitularAfectado", fields: [titularAfectado], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([momento, id])
+  /// Q-12 (CA-21, CA-25): "¿quién miró mi información?" y exportación de la
+  /// bitácora propia. Local a cada partición mensual.
+  @@index([titularAfectado, momento(sort: Desc)], map: "idx_evento_titular")
+  /// Q-13 (CA-10 de la 001, `auditoria.leer.propia`): "mi actividad reciente".
+  @@index([sujeto, momento(sort: Desc)], map: "idx_evento_sujeto")
+  /// Q-14 (CA-34): todas las creaciones de cuentas administradoras. El índice
+  /// real es PARCIAL sobre las tres acciones de administrador; diminuto.
+  @@index([momento], map: "idx_evento_admin")
+  /// Recorrido del sello de Merkle por ventana de secuencia (G.2).
+  @@index([secuencia], map: "idx_evento_secuencia")
+  /// NO hay índice sobre `idCorrelacion`: se usa en el registro de diagnóstico,
+  /// no en una consulta de producto (§3, índices descartados).
+  @@schema("auditoria")
+}
+
+/// **G.2 — Sello de la bitácora.** Sólo inserción.
+///
+/// Existe porque `REVOKE UPDATE, DELETE` **no alcanza** contra alguien con
+/// acceso de escritura a la base: el sello firmado periódicamente es lo que
+/// permite detectar la alteración después del hecho. Es la pieza que convierte
+/// "bitácora inmutable" (constitución #5) de una afirmación en algo demostrable.
+model SelloDeBitacora {
+  /// INT. Mes de la partición sellada.
+  particion DateTime @db.Date
+
+  /// INT.
+  desdeSecuencia BigInt
+
+  /// INT.
+  hastaSecuencia BigInt
+
+  /// INT. Raíz de Merkle de la ventana.
+  raiz String
+
+  /// INT.
+  algoritmo String @default("SHA-256/MERKLE")
+
+  /// INT.
+  firma String
+
+  /// INT. Identificador de la clave de firma.
+  kid String
+
+  /// INT.
+  momento DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([particion, desdeSecuencia])
+  @@schema("auditoria")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BLOQUE H — Retención, purga y parámetros
+// Constitución #11: ningún plazo ni umbral es una constante en el código.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// **H.1 — Regla de retención.** Es la tabla que el estudio jurídico completa
+/// cuando firme: hasta entonces, las claves sin plazo determinado salen con
+/// `accion = 'A_DETERMINAR'` y `plazoSegundos IS NULL`.
+model ReglaDeRetencion {
+  /// PUB.
+  clave ClaveDeRetencion @id
+
+  /// PUB. `CHECK ((accion = 'A_DETERMINAR') = (plazoSegundos IS NULL))`:
+  /// "no sé cuánto" es un estado de primera clase, no una fila ausente ni un
+  /// cero. Mismo criterio que `DisponibilidadParametro` en la 004.
+  plazoSegundos BigInt?
+
+  /// PUB.
+  accion AccionDeRetencion
+
+  /// PUB. La norma o el criterio que fija el plazo.
+  fundamento String
+
+  /// PUB.
+  requiereValidacionProfesional Boolean @default(true)
+
+  /// PUB. Vacía hasta que el estudio firme.
+  validadoPor String?
+
+  /// PUB.
+  validadoEn DateTime? @db.Date
+
+  /// PUB.
+  vigenteDesde DateTime @default(now()) @db.Timestamptz(6)
+
+  ejecuciones EjecucionDePurga[]
+
+  /// Destino de la clave foránea COMPUESTA de H.2. No aporta unicidad por sí
+  /// misma (`clave` ya es PK): es el mecanismo de R-002-15.
+  @@unique([clave, accion], map: "uq_retencion_clave_accion")
+  @@schema("acceso")
+}
+
+/// **H.2 — Ejecución de una purga.** Sólo inserción. Cada corrida deja fila,
+/// con cuántos registros alcanzó y con su evento de auditoría: es lo que hace
+/// **verificable** el "mecanismo de purga" que CA-28 exige.
+///
+/// **R-002-15 — no se purga bajo una regla que nadie determinó.**
+/// `CHECK (accionDeLaRegla <> 'A_DETERMINAR')` más la clave foránea compuesta
+/// con `ON UPDATE RESTRICT`. El efecto: mientras `bitacoraAuditoria` esté en
+/// `A_DETERMINAR`, la rutina de purga de la bitácora no puede registrar su
+/// ejecución, y por lo tanto **no se ejecuta**. Es el patrón de R-2 de la 004
+/// aplicado al problema inverso: allá impedía usar algo sin ratificar, acá
+/// impide **destruir** algo bajo un plazo sin ratificar. Destruir por error es
+/// irreversible; es la dirección correcta para el bloqueo.
+model EjecucionDePurga {
+  /// INT.
+  id String @id
+
+  /// INT.
+  clave ClaveDeRetencion
+
+  /// INT. Réplica sostenida por la clave foránea compuesta. No es
+  /// desnormalización: es el mecanismo.
+  accionDeLaRegla AccionDeRetencion
+
+  /// INT.
+  ejecutadaEn DateTime @default(now()) @db.Timestamptz(6)
+
+  /// INT.
+  registrosAlcanzados Int
+
+  /// INT. Referencia **por valor** al `auditoria.EventoAuditoria` de la
+  /// corrida: la bitácora está particionada y su PK es compuesta.
+  eventoId String
+
+  /// INT.
+  claveIdempotencia String @unique(map: "uq_purga_idempotencia")
+
+  regla ReglaDeRetencion @relation(fields: [clave, accionDeLaRegla], references: [clave, accion], onDelete: Restrict, onUpdate: Restrict, map: "fk_purga_regla")
+
+  /// Historial de corridas de una clave de retención.
+  @@index([clave, ejecutadaEn(sort: Desc)], map: "idx_purga_clave")
+  @@schema("acceso")
+}
+
+/// **H.3 — Parámetro de acceso.** Los umbrales de CA-37, las vidas de token,
+/// `matricula.vigenciaVerificacion` (12 meses) y `matricula.plazoMaximoRevision`
+/// (5 días hábiles). Constitución #11: ninguno es una constante en el código.
+///
+/// **Por qué una tabla propia y no `motor.ParametroNormativo`.** La 004 metió
+/// sus umbrales de producto en el catálogo normativo con un argumento
+/// explícito: "un umbral cambiado tiene que quedar en la trazabilidad del
+/// hallazgo". Acá ese argumento no aplica —no hay hallazgo— y acoplar el inicio
+/// de sesión al catálogo normativo significaría que un problema en el catálogo
+/// legal impide entrar al sistema.
+model ParametroDeAcceso {
+  /// PUB.
+  clave String @id
+
+  /// PUB.
+  valor Json @db.JsonB
+
+  /// PUB.
+  unidad String?
+
+  /// PUB.
+  vigenciaDesde DateTime @default(now()) @db.Timestamptz(6)
+
+  /// PUB.
+  vigenciaHasta DateTime? @db.Timestamptz(6)
+
+  /// PUB. `false` en todas las filas de la 002, con una excepción posible: si
+  /// el estudio dictamina sobre `matricula.vigenciaVerificacion`, esa fila pasa
+  /// a `requiereValidacionProfesional = true` sin cambiar de tabla.
+  esNormativo Boolean @default(false)
+
+  /// PUB.
+  requiereValidacionProfesional Boolean @default(false)
+
+  /// PUB.
+  notaDeAlcance String?
+
+  /// PUB.
+  validadoPor String?
+
+  /// PUB.
+  validadoEn DateTime? @db.Date
+
+  /// PUB.
+  creadoEn DateTime @default(now()) @db.Timestamptz(6)
+
+  @@schema("acceso")
 }

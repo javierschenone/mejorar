@@ -4,10 +4,12 @@
   "private": true,
   "description": "API de Mejorar. En esta etapa contiene únicamente el esquema de base de datos y sus migraciones (feature 004, tarea T-03). La aplicación NestJS la agrega dev-backend en la feature 007.",
   "scripts": {
+    "build": "prisma generate && tsc -p tsconfig.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:validate": "prisma validate",
+    "prisma:seed": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON prisma/seed.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest"

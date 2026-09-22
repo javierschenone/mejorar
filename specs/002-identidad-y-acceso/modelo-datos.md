@@ -17,6 +17,40 @@
 
 ---
 
+## Nota de implementación — 2026-09-22, tarea T-03
+
+G2 se aprobó y el modelo está implementado en `apps/api/prisma/**`: migraciones
+`0011` a `0021` y `0023`, más la `0022` escrita y **no ejecutada** en
+`prisma/migraciones-en-espera/`. Verificado contra PostgreSQL 16 real.
+
+Al transcribir el documento a SQL aparecieron **tres divergencias**. Ninguna se
+resolvió en silencio; las tres quedan acá y en el hand-back al orquestador para
+que se decidan en la compuerta que corresponda.
+
+| # | Dónde | Qué dice el documento | Qué se implementó y por qué |
+| --- | --- | --- | --- |
+| **N-1** | §7.2, tablas B.1 `VersionDocumentoAceptable` y B.2 `VersionInformacionArt6` | Están listadas entre las que no admiten `UPDATE` **nunca**. | **Se admite `UPDATE` de `vigenteHasta`, y de ninguna otra columna.** El documento tiene ahí una inconsistencia interna: las dos tablas llevan `vigenteHasta?`, que por definición se conoce *después* —cuando se publica la versión siguiente—, y con inmutabilidad total ninguna versión podría cerrarse jamás. El resultado sería un catálogo con N versiones simultáneamente vigentes y sin forma de saber cuál mostrar en el alta, que es justo lo que C-002-02 quiere evitar. El contenido —hash, referencia, responsable, destinatarios, `incluyeFinalidadesDeLa003`— sigue siendo inmutable, y el `DELETE` sigue prohibido. Se agregaron dos índices únicos parciales (`uq_documento_vigente`, `uq_art6_vigente`) para que "la versión vigente" tenga una sola respuesta. **Decisión menor, pero es una desviación del texto aprobado.** |
+| **N-2** | §H.3 y §C.4, plazo de escalamiento de CA-31 | `matricula.plazoMaximoRevision` = **5 días hábiles**, con dependencia declarada de `motor.DiaNoHabil` (Bloque E de la 004). | **La spec v4 dice "7 días corridos (parámetro de producto, no normativo, ajustable sin volver a esta compuerta)".** Este documento se escribió contra la spec v3. Por la precedencia de `CLAUDE.md` §6 (la spec aprobada está por encima del material del agente) se sembró `matricula.plazoMaximoRevisionDiasCorridos = 7`, con la divergencia escrita en `notaDeAlcance` de la propia fila. **Lo que NO se cambió, porque es decisión de compuerta:** la columna `EscalamientoDeVerificacion.diasHabilesTranscurridos` y el `GRANT SELECT` condicional sobre `motor.DiaNoHabil`. Si se confirma el criterio de días corridos, las dos cosas son vestigios y conviene retirarlas. |
+| **N-3** | §6.2, fila `0023` | La migración `0023` incluye "las cuentas de demostración (§6.5)". | **Las cuentas de demostración se movieron a `prisma/seed.ts`; la `0023` sólo siembra catálogos.** Una migración se aplica en *todos* los entornos, incluido producción: cuentas de demostración con contraseña conocida creadas por una migración son una puerta abierta esperando el despliegue distraído. §6.5 ya nombraba `prisma/seed.ts` como el lugar, así que esto alinea §6.2 con §6.5. |
+
+Dos huecos que la implementación deja **declarados y verificados por test**, no
+escondidos:
+
+1. **El texto del art. 6 sembrado es un borrador de desarrollo.** El inciso b)
+   exige identidad y domicilio del responsable, y hoy no están determinados
+   (condición C-002-11, inscripción ante la AAIP pendiente). La fila dice
+   `SIN DETERMINAR — BORRADOR DE DESARROLLO` en el propio dato. Inventar una
+   razón social sería peor que dejar el hueco visible: ese texto es prueba de
+   haber informado, y una prueba con un dato inventado adentro es peor que
+   ninguna.
+2. **D.8 `CorreoDeRolProhibido` queda vacía después de las migraciones**, así
+   que el mecanismo R-002-04 nace inerte. Su clave primaria es un HMAC con
+   `k_indice`, que por §4.3 vive **fuera de la base** y una migración no la
+   tiene. La siembra `prisma/seed.ts`, que sí puede leerla del entorno. Hay un
+   test que afirma el cero y otro que afirma que después del seed deja de serlo.
+
+---
+
 ## 0. Alcance, frontera y criterio de diseño
 
 ### 0.1 Qué persiste esta feature
@@ -493,6 +527,12 @@ y `motivo`. Este modelo **no duplica el calendario**: el proceso de escalamiento
 lee `motor.DiaNoHabil` con un `GRANT SELECT` acotado a `rol_acceso`. Duplicarlo
 garantizaría que los dos se desincronicen. Queda como punto de coordinación en
 §6.2 (la migración tiene que otorgar ese `GRANT`).
+
+> **Desactualizado — ver la nota N-2 del encabezado.** La spec **v4** cambió
+> CA-31 a **7 días corridos** y lo declaró parámetro de producto ajustable sin
+> compuerta. Este párrafo y `diasHabilesTranscurridos` se escribieron contra la
+> v3. El parámetro sembrado sigue la v4; la columna y el `GRANT` quedaron como
+> estaban porque retirarlos es una decisión de compuerta, no de la migración.
 
 ---
 
@@ -1396,6 +1436,13 @@ Las **únicas** columnas que admiten `UPDATE` en todo el modelo:
 H.2. `REVOKE UPDATE, DELETE` al rol de aplicación más disparador que lanza
 excepción. Se verifica con una prueba que intenta un `UPDATE` sobre cada una y
 **espera el error**.
+
+> **Corregido en la implementación — ver la nota N-1 del encabezado.** B.1 y
+> B.2 sí admiten `UPDATE` de `vigenteHasta` y de nada más: sin eso ninguna
+> versión de documento podría cerrarse nunca y el catálogo quedaría con varias
+> vigentes a la vez. D.5 admite `DELETE` (su retención son 7 días y no está
+> particionada); el `UPDATE` le sigue estando prohibido, que es la invariante
+> real.
 
 ### 7.3 Invariantes que quedan en la aplicación (y por qué)
 
