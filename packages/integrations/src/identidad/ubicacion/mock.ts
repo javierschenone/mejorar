@@ -42,6 +42,21 @@ interface RangoDeDemostracion {
  * constructor: una tabla desordenada rompería la búsqueda binaria en silencio.
  */
 export const RANGOS_DE_DEMOSTRACION: readonly RangoDeDemostracion[] = [
+  // ── Bloques verosímiles de la región, ordenados por IP ────────────────────
+  {
+    desde: '181.0.0.0',
+    hasta: '181.15.255.255',
+    pais: 'AR',
+    provincia: 'Buenos Aires',
+    nota: 'Bloque de la región administrado por LACNIC. Asignación aproximada, sólo demostración.',
+  },
+  {
+    desde: '190.16.0.0',
+    hasta: '190.19.255.255',
+    pais: 'AR',
+    provincia: 'Santa Fe',
+    nota: 'Bloque de la región administrado por LACNIC. Asignación aproximada, sólo demostración.',
+  },
   // ── Reservados para documentación (RFC 5737): son los que usan los tests ──
   {
     desde: '192.0.2.0',
@@ -56,28 +71,6 @@ export const RANGOS_DE_DEMOSTRACION: readonly RangoDeDemostracion[] = [
     pais: 'AR',
     provincia: 'Córdoba',
     nota: 'TEST-NET-2, reservado por RFC 5737. Fijación para tests y siembras.',
-  },
-  {
-    desde: '203.0.113.0',
-    hasta: '203.0.113.255',
-    pais: 'UY',
-    provincia: 'Montevideo',
-    nota: 'TEST-NET-3, reservado por RFC 5737. Fijación del caso "acceso desde el exterior".',
-  },
-  // ── Bloques verosímiles de la región. Aproximados, para demostración ──────
-  {
-    desde: '181.0.0.0',
-    hasta: '181.15.255.255',
-    pais: 'AR',
-    provincia: 'Buenos Aires',
-    nota: 'Bloque de la región administrado por LACNIC. Asignación aproximada, sólo demostración.',
-  },
-  {
-    desde: '190.16.0.0',
-    hasta: '190.19.255.255',
-    pais: 'AR',
-    provincia: 'Santa Fe',
-    nota: 'Bloque de la región administrado por LACNIC. Asignación aproximada, sólo demostración.',
   },
   {
     desde: '200.45.0.0',
@@ -99,6 +92,13 @@ export const RANGOS_DE_DEMOSTRACION: readonly RangoDeDemostracion[] = [
     pais: 'AR',
     provincia: null,
     nota: 'País sin provincia: el caso en el que la base sabe el país y nada más.',
+  },
+  {
+    desde: '203.0.113.0',
+    hasta: '203.0.113.255',
+    pais: 'UY',
+    provincia: 'Montevideo',
+    nota: 'TEST-NET-3, reservado por RFC 5737. Fijación del caso "acceso desde el exterior".',
   },
 ];
 

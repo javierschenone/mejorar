@@ -13,7 +13,13 @@ import { describe, expect, it } from 'vitest';
 import type { DecisionDeBloqueo, DuracionEnSegundos, Instante, PoliticaDeBloqueo } from './contrato/v1';
 import { decidirBloqueo, demoraPorIntentos, laRecuperacionSigueDisponible } from './bloqueo';
 import { PARAMETROS_DE_IDENTIDAD } from './parametros';
-import { duracionLiteral, instanteDesde } from './tiempo';
+import { duracionLiteral, comoInstante, instanteDesdeMilisegundos, milisegundosDe } from './tiempo';
+
+function instante(texto: string): Instante {
+  const resultado = comoInstante(texto);
+  if (!resultado.ok) throw new Error(`instante de prueba inválido: ${texto}`);
+  return resultado.valor;
+}
 
 describe('CA-09 — demora creciente por intentos fallidos', () => {
   it('cero o un intento: sin demora', () => {
@@ -43,8 +49,7 @@ describe('CA-09 — umbral de bloqueo y decisión', () => {
     laRecuperacionSiempreDisponible: true,
   };
 
-  const ahora = new Date('2026-09-21T14:00:00.000Z');
-  const instanTeAhora = instanteDesde(ahora) as any;
+  const instanTeAhora = instante('2026-09-21T14:00:00.000Z');
 
   it('sin intentos fallidos: se permite', () => {
     const resultado = decidirBloqueo([], politica, instanTeAhora);
@@ -52,13 +57,14 @@ describe('CA-09 — umbral de bloqueo y decisión', () => {
   });
 
   it('con cuatro intentos fallidos: se demorar', () => {
-    const hace1Min = new Date(ahora.getTime() - 1 * 60_000);
-    const hace2Min = new Date(ahora.getTime() - 2 * 60_000);
-    const hace3Min = new Date(ahora.getTime() - 3 * 60_000);
-    const hace4Min = new Date(ahora.getTime() - 4 * 60_000);
+    const ahoraMs = milisegundosDe(instanTeAhora);
+    const hace1Min = instanteDesdeMilisegundos(ahoraMs - 1 * 60_000);
+    const hace2Min = instanteDesdeMilisegundos(ahoraMs - 2 * 60_000);
+    const hace3Min = instanteDesdeMilisegundos(ahoraMs - 3 * 60_000);
+    const hace4Min = instanteDesdeMilisegundos(ahoraMs - 4 * 60_000);
 
     const resultado = decidirBloqueo(
-      [instanteDesde(hace4Min), instanteDesde(hace3Min), instanteDesde(hace2Min), instanteDesde(hace1Min)] as any,
+      [hace4Min, hace3Min, hace2Min, hace1Min],
       politica,
       instanTeAhora,
     );
@@ -72,20 +78,15 @@ describe('CA-09 — umbral de bloqueo y decisión', () => {
   });
 
   it('con exactamente cinco intentos: se bloquea', () => {
-    const hace1Min = new Date(ahora.getTime() - 1 * 60_000);
-    const hace2Min = new Date(ahora.getTime() - 2 * 60_000);
-    const hace3Min = new Date(ahora.getTime() - 3 * 60_000);
-    const hace4Min = new Date(ahora.getTime() - 4 * 60_000);
-    const hace5Min = new Date(ahora.getTime() - 5 * 60_000);
+    const ahoraMs = milisegundosDe(instanTeAhora);
+    const hace1Min = instanteDesdeMilisegundos(ahoraMs - 1 * 60_000);
+    const hace2Min = instanteDesdeMilisegundos(ahoraMs - 2 * 60_000);
+    const hace3Min = instanteDesdeMilisegundos(ahoraMs - 3 * 60_000);
+    const hace4Min = instanteDesdeMilisegundos(ahoraMs - 4 * 60_000);
+    const hace5Min = instanteDesdeMilisegundos(ahoraMs - 5 * 60_000);
 
     const resultado = decidirBloqueo(
-      [
-        instanteDesde(hace5Min),
-        instanteDesde(hace4Min),
-        instanteDesde(hace3Min),
-        instanteDesde(hace2Min),
-        instanteDesde(hace1Min),
-      ] as any,
+      [hace5Min, hace4Min, hace3Min, hace2Min, hace1Min],
       politica,
       instanTeAhora,
     );
@@ -93,28 +94,23 @@ describe('CA-09 — umbral de bloqueo y decisión', () => {
     expect(resultado.clase).toBe('BLOQUEAR');
     if (resultado.clase === 'BLOQUEAR') {
       // El bloqueo se cuenta desde el último intento + duración
-      const ultimoIntento = ahora.getTime() - 1 * 60_000;
-      const bloqueadaHasta = ultimoIntento + politica.duracionDelBloqueo * 1000;
-      expect(new Date(resultado.hasta as any).getTime()).toBeLessThanOrEqual(bloqueadaHasta + 1000); // +1s de tolerancia
+      const ultimoIntentoMs = ahoraMs - 1 * 60_000;
+      const bloqueadaHastaMs = ultimoIntentoMs + politica.duracionDelBloqueo * 1000;
+      expect(milisegundosDe(resultado.hasta as any)).toBe(bloqueadaHastaMs);
     }
   });
 
   it('borde: intento en el último milisegundo de la ventana cuenta', () => {
-    const enlaBorde = new Date(ahora.getTime() - 900 * 1000); // exactamente 15 min
-    const hace4Min = new Date(ahora.getTime() - 4 * 60_000);
-    const hace3Min = new Date(ahora.getTime() - 3 * 60_000);
-    const hace2Min = new Date(ahora.getTime() - 2 * 60_000);
-    const hace1Min = new Date(ahora.getTime() - 1 * 60_000);
+    const ahoraMs = milisegundosDe(instanTeAhora);
+    const enlaBorde = instanteDesdeMilisegundos(ahoraMs - 900 * 1000); // exactamente 15 min
+    const hace4Min = instanteDesdeMilisegundos(ahoraMs - 4 * 60_000);
+    const hace3Min = instanteDesdeMilisegundos(ahoraMs - 3 * 60_000);
+    const hace2Min = instanteDesdeMilisegundos(ahoraMs - 2 * 60_000);
+    const hace1Min = instanteDesdeMilisegundos(ahoraMs - 1 * 60_000);
 
     // Cinco intentos, el primero está en la borde exacta de la ventana.
     const resultado = decidirBloqueo(
-      [
-        instanteDesde(enlaBorde),
-        instanteDesde(hace4Min),
-        instanteDesde(hace3Min),
-        instanteDesde(hace2Min),
-        instanteDesde(hace1Min),
-      ] as any,
+      [enlaBorde, hace4Min, hace3Min, hace2Min, hace1Min],
       politica,
       instanTeAhora,
     );
@@ -125,21 +121,16 @@ describe('CA-09 — umbral de bloqueo y decisión', () => {
   });
 
   it('borde: intento afuera de la ventana no cuenta', () => {
-    const fueraDeVentana = new Date(ahora.getTime() - 901 * 1000); // 15:01 min
-    const hace4Min = new Date(ahora.getTime() - 4 * 60_000);
-    const hace3Min = new Date(ahora.getTime() - 3 * 60_000);
-    const hace2Min = new Date(ahora.getTime() - 2 * 60_000);
-    const hace1Min = new Date(ahora.getTime() - 1 * 60_000);
+    const ahoraMs = milisegundosDe(instanTeAhora);
+    const fueraDeVentana = instanteDesdeMilisegundos(ahoraMs - 901 * 1000); // 15:01 min
+    const hace4Min = instanteDesdeMilisegundos(ahoraMs - 4 * 60_000);
+    const hace3Min = instanteDesdeMilisegundos(ahoraMs - 3 * 60_000);
+    const hace2Min = instanteDesdeMilisegundos(ahoraMs - 2 * 60_000);
+    const hace1Min = instanteDesdeMilisegundos(ahoraMs - 1 * 60_000);
 
     // Cinco instantes, pero el primero no cuenta. Quedan cuatro, que producen demora.
     const resultado = decidirBloqueo(
-      [
-        instanteDesde(fueraDeVentana),
-        instanteDesde(hace4Min),
-        instanteDesde(hace3Min),
-        instanteDesde(hace2Min),
-        instanteDesde(hace1Min),
-      ] as any,
+      [fueraDeVentana, hace4Min, hace3Min, hace2Min, hace1Min],
       politica,
       instanTeAhora,
     );
@@ -148,21 +139,16 @@ describe('CA-09 — umbral de bloqueo y decisión', () => {
   });
 
   it('el bloqueo se cuenta desde el último intento fallido, no el primero', () => {
-    const hace10Min = new Date(ahora.getTime() - 10 * 60_000);
-    const hace5Min = new Date(ahora.getTime() - 5 * 60_000);
-    const hace4Min = new Date(ahora.getTime() - 4 * 60_000);
-    const hace3Min = new Date(ahora.getTime() - 3 * 60_000);
-    const hace1Min = new Date(ahora.getTime() - 1 * 60_000);
+    const ahoraMs = milisegundosDe(instanTeAhora);
+    const hace10Min = instanteDesdeMilisegundos(ahoraMs - 10 * 60_000);
+    const hace5Min = instanteDesdeMilisegundos(ahoraMs - 5 * 60_000);
+    const hace4Min = instanteDesdeMilisegundos(ahoraMs - 4 * 60_000);
+    const hace3Min = instanteDesdeMilisegundos(ahoraMs - 3 * 60_000);
+    const hace1Min = instanteDesdeMilisegundos(ahoraMs - 1 * 60_000);
 
     // Cinco intentos, pero espaciados. El bloqueo se cuenta desde hace1Min.
     const resultado = decidirBloqueo(
-      [
-        instanteDesde(hace10Min),
-        instanteDesde(hace5Min),
-        instanteDesde(hace4Min),
-        instanteDesde(hace3Min),
-        instanteDesde(hace1Min),
-      ] as any,
+      [hace10Min, hace5Min, hace4Min, hace3Min, hace1Min],
       politica,
       instanTeAhora,
     );
@@ -170,29 +156,50 @@ describe('CA-09 — umbral de bloqueo y decisión', () => {
     expect(resultado.clase).toBe('BLOQUEAR');
     if (resultado.clase === 'BLOQUEAR') {
       // Se cuenta desde hace1Min (último intento) + duración del bloqueo.
-      const ultimoIntento = ahora.getTime() - 1 * 60_000;
-      const bloqueadaHasta = ultimoIntento + politica.duracionDelBloqueo * 1000;
-      const esperado = new Date(bloqueadaHasta).toISOString();
-      expect(resultado.hasta).toBe(esperado as any);
+      const ultimoIntentoMs = ahoraMs - 1 * 60_000;
+      const bloqueadaHastaMs = ultimoIntentoMs + politica.duracionDelBloqueo * 1000;
+      expect(milisegundosDe(resultado.hasta as any)).toBe(bloqueadaHastaMs);
     }
   });
 
   it('si el bloqueo ya venció: se permite (temporal de verdad)', () => {
-    const hace10Min = new Date(ahora.getTime() - 10 * 60_000);
-    const hace6Min = new Date(ahora.getTime() - 6 * 60_000); // Último intento hace 6 min
-    const hace5Min = new Date(ahora.getTime() - 5 * 60_000);
-    const hace4Min = new Date(ahora.getTime() - 4 * 60_000);
-    const hace3Min = new Date(ahora.getTime() - 3 * 60_000);
+    const ahoraMs = milisegundosDe(instanTeAhora);
+    // Cinco intentos, el último es hace 10 minutos (ya fuera de la ventana de 15 min).
+    // Entonces quedan 4 intentos válidos en la ventana.
+    // Con 4 intentos: demora, no bloqueo.
+    // Pero si el último intento válido (hace3Min) + bloqueo (5min) < ahora, se permite.
+    // hace3Min + 300s = ahoraMs - 180_000 + 300_000 = ahoraMs + 120_000 (en el futuro!)
+    // Por lo tanto, le error está en los valores. Ajustamos:
+    // Queremos que: ultimoIntento + duracion < ahora
+    // Entonces: ahora - X + duracion < ahora → duracion < X
+    // Si duracion = 5min = 300s, queremos X > 300s, es decir al menos 6 minutos.
+    const hace16Min = instanteDesdeMilisegundos(ahoraMs - 16 * 60_000); // fuera de la ventana
+    const hace10Min = instanteDesdeMilisegundos(ahoraMs - 10 * 60_000); // último dentro de ventana
+    const hace9Min = instanteDesdeMilisegundos(ahoraMs - 9 * 60_000);
+    const hace8Min = instanteDesdeMilisegundos(ahoraMs - 8 * 60_000);
+    const hace7Min = instanteDesdeMilisegundos(ahoraMs - 7 * 60_000);
 
-    // Bloqueo de 5 min: hace6Min + 5min = hace1Min. Ya pasó hace1Min.
+    // 4 intentos en la ventana: hace10Min + 300s = ahoraMs - 600_000 + 300_000 = ahoraMs - 300_000
+    // ahora vs hace5min: -300_000 <= 0 sí, el bloqueo ya venció.
+    // Pero espera, hace10Min es una hora con 16 minutos, y ventana es 15 minutos.
+    // Entonces hace10Min está DENTRO de la ventana (10 < 15). Quedan 4 intentos de 5.
+    // Los 4 intentos NO llegan al umbral. Demora, no bloqueo.
+    //
+    // Rehacemos: queremos 5 intentos donde el último esté hace más de 5 minutos.
+    // Si umbral = 5 intentos y duracion = 5 min, y el último fue hace 6 min:
+    // último + 5min = hace6min + 5min = hace 1min. Ya pasó!
+
+    // Simplest: put all 5 within the window but with the last one old enough.
+    const hace12Min = instanteDesdeMilisegundos(ahoraMs - 12 * 60_000); // último, pero hace 12 min
+    const hace11Min = instanteDesdeMilisegundos(ahoraMs - 11 * 60_000);
+    const hace10MinNew = instanteDesdeMilisegundos(ahoraMs - 10 * 60_000);
+    const hace9MinNew = instanteDesdeMilisegundos(ahoraMs - 9 * 60_000);
+    const hace8MinNew = instanteDesdeMilisegundos(ahoraMs - 8 * 60_000);
+
+    // 5 intentos: hace12 + 300s = ahoraMs - 720_000 + 300_000 = ahoraMs - 420_000
+    // ahoraMs - 420_000 <= ahoraMs? Sí, ya pasó el bloqueo.
     const resultado = decidirBloqueo(
-      [
-        instanteDesde(hace10Min),
-        instanteDesde(hace6Min),
-        instanteDesde(hace5Min),
-        instanteDesde(hace4Min),
-        instanteDesde(hace3Min),
-      ] as any,
+      [hace12Min, hace11Min, hace10MinNew, hace9MinNew, hace8MinNew],
       politica,
       instanTeAhora,
     );
@@ -201,15 +208,16 @@ describe('CA-09 — umbral de bloqueo y decisión', () => {
   });
 
   it('intentos futuros se ignoran (reloj desfasado): no castigan', () => {
-    const esFuturo = new Date(ahora.getTime() + 1 * 60_000);
-    const hace4Min = new Date(ahora.getTime() - 4 * 60_000);
-    const hace3Min = new Date(ahora.getTime() - 3 * 60_000);
-    const hace2Min = new Date(ahora.getTime() - 2 * 60_000);
-    const hace1Min = new Date(ahora.getTime() - 1 * 60_000);
+    const ahoraMs = milisegundosDe(instanTeAhora);
+    const esFuturo = instanteDesdeMilisegundos(ahoraMs + 1 * 60_000);
+    const hace4Min = instanteDesdeMilisegundos(ahoraMs - 4 * 60_000);
+    const hace3Min = instanteDesdeMilisegundos(ahoraMs - 3 * 60_000);
+    const hace2Min = instanteDesdeMilisegundos(ahoraMs - 2 * 60_000);
+    const hace1Min = instanteDesdeMilisegundos(ahoraMs - 1 * 60_000);
 
     // Cuatro intentos válidos + uno futuro: quedan cuatro, demora.
     const resultado = decidirBloqueo(
-      [instanteDesde(esFuturo), instanteDesde(hace4Min), instanteDesde(hace3Min), instanteDesde(hace2Min), instanteDesde(hace1Min)] as any,
+      [esFuturo, hace4Min, hace3Min, hace2Min, hace1Min],
       politica,
       instanTeAhora,
     );
@@ -227,24 +235,17 @@ describe('CA-36 — recaudo A-1: recuperación siempre disponible', () => {
   };
 
   it('laRecuperacionSigueDisponible retorna el literal true incluso con bloqueo', () => {
-    const ahora = new Date('2026-09-21T14:00:00.000Z');
-    const instanTeAhora = instanteDesde(ahora) as any;
-
-    const hace1Min = new Date(ahora.getTime() - 1 * 60_000);
-    const hace2Min = new Date(ahora.getTime() - 2 * 60_000);
-    const hace3Min = new Date(ahora.getTime() - 3 * 60_000);
-    const hace4Min = new Date(ahora.getTime() - 4 * 60_000);
-    const hace5Min = new Date(ahora.getTime() - 5 * 60_000);
+    const instanTeAhora = instante('2026-09-21T14:00:00.000Z');
+    const ahoraMs = milisegundosDe(instanTeAhora);
+    const hace1Min = instanteDesdeMilisegundos(ahoraMs - 1 * 60_000);
+    const hace2Min = instanteDesdeMilisegundos(ahoraMs - 2 * 60_000);
+    const hace3Min = instanteDesdeMilisegundos(ahoraMs - 3 * 60_000);
+    const hace4Min = instanteDesdeMilisegundos(ahoraMs - 4 * 60_000);
+    const hace5Min = instanteDesdeMilisegundos(ahoraMs - 5 * 60_000);
 
     // Cuenta bloqueada
     const decision: DecisionDeBloqueo = decidirBloqueo(
-      [
-        instanteDesde(hace5Min),
-        instanteDesde(hace4Min),
-        instanteDesde(hace3Min),
-        instanteDesde(hace2Min),
-        instanteDesde(hace1Min),
-      ] as any,
+      [hace5Min, hace4Min, hace3Min, hace2Min, hace1Min],
       politica,
       instanTeAhora,
     );
@@ -260,13 +261,6 @@ describe('CA-36 — recaudo A-1: recuperación siempre disponible', () => {
     // Como TypeScript verifica tipos estáticamente, la presencia de esta
     // función con return type `true` y la llamada exitosa aquí prueban que
     // el compilador verifica el tipo.
-    const politica: PoliticaDeBloqueo = {
-      umbralDeIntentos: 5,
-      ventana: duracionLiteral(900),
-      duracionDelBloqueo: duracionLiteral(300),
-      laRecuperacionSiempreDisponible: true,
-    };
-
     const decision: DecisionDeBloqueo = { clase: 'PERMITIR' };
     const resultado = laRecuperacionSigueDisponible(decision, politica);
 
