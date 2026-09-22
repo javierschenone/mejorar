@@ -42,9 +42,15 @@ export interface IpAnalizada {
    */
   readonly valor: bigint;
   /**
-   * `true` si es privada, de bucle local, de enlace local, de documentación
-   * reservada por el IETF o de traducción a gran escala (CGNAT). Para todas
-   * ellas la respuesta correcta es "no sé", no un país inventado.
+   * `true` si es privada, de bucle local, de enlace local, de multidifusión o
+   * de traducción a gran escala (CGNAT). Para todas ellas la respuesta correcta
+   * es "no sé", no un país inventado.
+   *
+   * Los rangos que el IETF reserva **para documentación** (192.0.2.0/24,
+   * 198.51.100.0/24, 203.0.113.0/24 y 2001:db8::/32) quedan a propósito fuera
+   * de esta lista: son las fijaciones del mock y de los tests, y marcarlos como
+   * reservados los volvería inservibles para eso. No son enrutables, así que la
+   * IP de una persona real nunca cae ahí.
    */
   readonly esReservada: boolean;
 }
@@ -128,7 +134,6 @@ export function analizarIp(ip: string): IpAnalizada | null {
     completa === 0n || // ::
     completa === 1n || // ::1 bucle local
     (completa >> 121n) === 0x7fn || // fe00::/7 — incluye enlace local fe80::/10
-    (altos >> 57n) === 0x7en || // fc00::/7 únicas locales
-    (altos >> 32n) === 0x20010db8n; // 2001:db8::/32 documentación
+    (altos >> 57n) === 0x7en; // fc00::/7 únicas locales
   return { familia: 'IPV6', valor: altos, esReservada };
 }

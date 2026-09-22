@@ -75,6 +75,20 @@ humano**.
 Un agente que necesita tocar algo fuera de su columna "Escribe" **no lo toca**:
 reporta el bloqueo al orquestador, que asigna al agente correcto.
 
+**Modelo por agente.** `arquitecto`, `database-engineer`, `ux-expert` y
+`compliance-legal` corren en Opus: diseñan, deciden entre alternativas y
+asumen riesgo legal — necesitan el razonamiento más profundo. Los cinco
+`dev-*` y el `tester` corren en **Haiku**: ejecutan encargos ya muy
+detallados (spec + plan + contrato + modelo de datos, todo escrito antes de
+que empiecen) y el trabajo es mayormente mecánico. Decisión del product
+owner, 2026-09-22, para reducir la frecuencia con la que el proyecto choca
+contra el límite de sesión de Opus. El orquestador sigue verificando de forma
+independiente (build, test, y contra una base real cuando aplica) antes de
+commitear — ese control no depende de qué modelo escribió el código. Si un
+`dev-*` o el `tester` reporta que una tarea excede lo que puede resolver con
+el detalle que recibió, se escala y se reevalúa el modelo para esa tarea
+puntual, no se asume que Haiku sirve para todo sin verificación.
+
 **Tests unitarios: son de quien implementa, no del `tester`.** Cada agente
 `dev-*` y `database-engineer` escribe los tests unitarios de su propio paquete,
 co-ubicados con el código (`*.test.ts` dentro de su propio alcance de

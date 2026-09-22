@@ -33,8 +33,10 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verificar:contrato": "node scripts/verificar-contrato.mjs",
     "clean": "rm -rf dist tsconfig.build.tsbuildinfo"
+  },
+  "dependencies": {
+    "@mejorar/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.20.4",

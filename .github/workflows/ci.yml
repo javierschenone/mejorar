@@ -3,11 +3,14 @@ name: CI
 # Integración continua del monorepo.
 #
 # Orden: lo barato primero, fallo temprano.
-#   identidad del contrato -> lint -> typecheck -> tests unitarios -> build -> benchmark
+#   secretos + identidad del contrato -> lint -> typecheck -> tests unitarios
+#   -> build -> benchmarks -> prueba de temporización
 #
 # Este pipeline no despliega nada y no usa ningún secreto: sólo lee el
 # repositorio. El despliegue es otro flujo y exige aprobación humana puntual
-# para ese despliegue (compuerta G6, `CLAUDE.md` §4).
+# para ese despliegue (compuerta G6, `CLAUDE.md` §4). Las claves que algún job
+# necesita se generan al vuelo y se descartan; el procedimiento real de
+# generación y custodia por entorno está en `scripts/ci/claves-y-custodia.md`.
 
 on:
   pull_request:
@@ -16,6 +19,12 @@ on:
       - main
       - 'claude/**'
       - 'feat/**'
+  schedule:
+    # Lunes 06:00 UTC (03:00 en Argentina). La corrida programada es la que
+    # hace la versión completa de lo que en un PR corre acotado: la prueba de
+    # temporización con N = 1000 de ADR-025 y la revisión del historial de git
+    # en busca de secretos. En un PR eso serían horas de ejecutor.
+    - cron: '0 6 * * 1'
   workflow_dispatch:
 
 permissions:

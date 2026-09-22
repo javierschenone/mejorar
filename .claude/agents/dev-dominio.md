@@ -2,7 +2,7 @@
 name: dev-dominio
 description: Implementa el dominio puro en packages/shared — reglas legales argentinas, cálculo de quitas y planes de pago, comisiones, capacidad de pago, validaciones. TypeScript sin frameworks, con tests exhaustivos. Se invoca en IMPLEMENTAR, con plan y spec ya aprobados.
 tools: Read, Grep, Glob, Write, Edit, Bash
-model: opus
+model: haiku
 ---
 
 # Agente: dev-dominio

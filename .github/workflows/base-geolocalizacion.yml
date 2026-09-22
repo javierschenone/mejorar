@@ -1,0 +1,118 @@
+name: Base de geolocalización (mensual)
+
+# Actualización mensual de la base local IP→ubicación — ADR-029, T-13 de la
+# feature 002.
+#
+# ADR-029 prohíbe consultar una API externa para resolver la IP de un titular:
+# sería un encargado de tratamiento y una probable transferencia internacional
+# (arts. 12 y 25 de la Ley 25.326). El precio de esa decisión —correcta— es
+# este mantenimiento. DB-IP Lite publica una vez por mes, con licencia CC-BY y
+# sin cuenta ni clave: este workflow **no usa ningún secreto**.
+#
+# El job no fusiona nada: deja el archivo actualizado y abre un PR. El árbol
+# `packages/integrations/**` es de `dev-integraciones`, y un dato que entra al
+# producto pasa por revisión humana como cualquier otro cambio.
+#
+# Mientras `dev-integraciones` no haya incorporado la base (T-02), el job corre
+# igual y reporta la dependencia. Está preparado, no pendiente de escribir.
+
+on:
+  schedule:
+    # Día 3 de cada mes, 05:30 UTC (02:30 en Argentina). El día 3 y no el 1:
+    # DB-IP publica a principios de mes y el guion ya sabe caer a la
+    # publicación anterior si la del mes todavía no está.
+    - cron: '30 5 3 * *'
+  workflow_dispatch:
+    inputs:
+      mes:
+        description: 'Mes a descargar (AAAA-MM). Vacío = el mes en curso.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: base-geolocalizacion
+  cancel-in-progress: false
+
+jobs:
+  actualizar:
+    name: Descargar y proponer la base del mes
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Traer el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Descargar y validar la base
+        id: base
+        env:
+          MES_BASE_IP: ${{ inputs.mes }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MES_BASE_IP:-}" ]; then
+            unset MES_BASE_IP
+          fi
+          ./scripts/ci/actualizar-base-geolocalizacion.sh
+
+      - name: Abrir el PR con la base nueva
+        if: steps.base.outputs.actualizado == 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.base.outputs.version }}
+          VERSION_ANTERIOR: ${{ steps.base.outputs.version_anterior }}
+          FILAS: ${{ steps.base.outputs.filas }}
+        run: |
+          set -euo pipefail
+          rama="datos/base-geolocalizacion-${VERSION}"
+
+          if git ls-remote --exit-code --heads origin "$rama" >/dev/null 2>&1; then
+            echo "::notice::La rama ${rama} ya existe: hay un PR abierto para esta versión. No se duplica."
+            exit 0
+          fi
+
+          git config user.name 'actualizacion-automatica'
+          git config user.email 'actualizacion-automatica@users.noreply.github.com'
+          git checkout -b "$rama"
+          git add -A
+          git commit -m "datos(integraciones): base de geolocalización ${VERSION}
+
+          Actualización mensual automática de la base local IP→ubicación
+          (DB-IP Lite, licencia CC-BY). Reemplaza la versión ${VERSION_ANTERIOR}.
+          ${FILAS} filas verificadas: tamaño, integridad del gzip y forma de la
+          primera fila.
+
+          ADR-029 (resolución local y obligatoria, sin encargado de tratamiento).
+          Spec: specs/002-identidad-y-acceso/plan.md (obligación F-11)."
+          git push origin "$rama"
+
+          gh pr create \
+            --title "datos(integraciones): base de geolocalización ${VERSION}" \
+            --body "Actualización mensual automática de la base local IP→ubicación (ADR-029).
+
+          | Campo | Valor |
+          | --- | --- |
+          | Versión nueva | \`${VERSION}\` |
+          | Versión anterior | \`${VERSION_ANTERIOR}\` |
+          | Filas | ${FILAS} |
+          | Fuente | DB-IP Lite country, licencia CC-BY |
+
+          **Qué revisar**: que la resolución IP→ubicación siga dando lo esperado con los tests del adaptador
+          (\`dev-integraciones\`, T-02) y que \`versionDeLaBase\` quede registrada junto a la sesión, como pide
+          ADR-029 §1. La atribución de la licencia en la interfaz es la obligación F-13.
+
+          Generado por \`.github/workflows/base-geolocalizacion.yml\`. Ningún secreto interviene en este flujo." \
+            --base "${GITHUB_REF_NAME}" \
+            --head "$rama"
+
+      - name: Sin cambios
+        if: steps.base.outputs.actualizado != 'si'
+        run: echo "No hubo actualización (${{ steps.base.outputs.motivo }}). El resumen del job explica por qué."

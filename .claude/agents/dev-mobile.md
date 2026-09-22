@@ -2,7 +2,7 @@
 name: dev-mobile
 description: Implementa la app iOS/Android del deudor en apps/mobile con Expo/React Native — autenticación, diagnóstico de deudas, seguimiento del caso, notificaciones push, carga de documentos, educación financiera.
 tools: Read, Grep, Glob, Write, Edit, Bash
-model: opus
+model: haiku
 ---
 
 # Agente: dev-mobile

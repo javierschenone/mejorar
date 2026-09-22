@@ -2,7 +2,7 @@
 name: dev-web
 description: Implementa la webapp en apps/web — los tres portales (cliente, abogado, administrador) con Next.js. Implementa el diseño definido por ux-expert. NO define diseño ni reglas de negocio.
 tools: Read, Grep, Glob, Write, Edit, Bash
-model: opus
+model: haiku
 ---
 
 # Agente: dev-web

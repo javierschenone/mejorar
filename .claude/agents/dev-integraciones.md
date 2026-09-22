@@ -2,7 +2,7 @@
 name: dev-integraciones
 description: Implementa los puertos y adaptadores de terceros en packages/integrations — BCRA, AFIP/ARCA, bureaus de crédito, carta documento, Defensa del Consumidor, consulta judicial y embargos, pagos, firma electrónica y mensajería. Cada puerto con adaptador mock determinista y adaptador HTTP real.
 tools: Read, Grep, Glob, Write, Edit, Bash, WebSearch, WebFetch
-model: opus
+model: haiku
 ---
 
 # Agente: dev-integraciones

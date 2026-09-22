@@ -2,7 +2,7 @@
 name: dev-backend
 description: Implementa la API en apps/api/src — módulos NestJS, autenticación, RBAC, casos, negociaciones, colectivos, pagos, documentos, auditoría, webhooks. Consume el dominio y las integraciones. NO define el esquema Prisma.
 tools: Read, Grep, Glob, Write, Edit, Bash
-model: opus
+model: haiku
 ---
 
 # Agente: dev-backend

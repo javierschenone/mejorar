@@ -147,7 +147,7 @@ export class BaseLocalDeUbicacion implements PuertoUbicacionPorIp {
     private readonly ipv6: Tabla,
     private readonly ubicaciones: readonly UbicacionAproximada[],
     version: string,
-    private readonly tieneProvincia: boolean,
+    tieneProvincia: boolean,
   ) {
     this.versionDeLaBase = version;
     this.cobertura = {

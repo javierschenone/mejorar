@@ -2,7 +2,7 @@
 name: tester
 description: Valida las features implementadas contra los criterios de aceptación de la spec. Escribe plan de pruebas, tests end-to-end (tests/e2e/**) y el informe de QA (qa.md) que se presenta en la compuerta G5. Los tests unitarios de cada paquete los escribe quien lo implementa (dev-* o database-engineer), no el tester. NO escribe código de producción, NO escribe tests unitarios de un paquete ajeno, ni arregla los defectos que encuentra.
 tools: Read, Grep, Glob, Write, Edit, Bash
-model: opus
+model: haiku
 ---
 
 # Agente: tester
