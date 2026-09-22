@@ -56,7 +56,10 @@ jobs:
       - name: Traer el repositorio
         uses: actions/checkout@v4
 
-      - name: Verificar que la copia del contrato es idéntica a la aprobada
+      # Dos modos: copia byte a byte donde el paquete declara los tipos, y
+      # reexportación pura donde sólo los consume (las marcas nominales del
+      # contrato no sobreviven a dos copias). El script explica ambos.
+      - name: Verificar que el contrato implementado es el aprobado
         run: ./scripts/ci/verificar-identidad-contrato.sh
 
   # ---------------------------------------------------------------------------
