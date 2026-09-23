@@ -34,6 +34,15 @@ import { registroDeRecursos } from './registro';
 const marcaAutorizacionPrivada = Symbol('Autorizacion');
 
 /**
+ * Convierte un permiso del contrato (con puntos) al formato de enum de Prisma (snake_case).
+ * El contrato usa "usuario.leer" pero Prisma usa "usuario_leer" en el TypeScript
+ * y "usuario.leer" en la base.
+ */
+function convertirPermisoAlPrismaEnum(permiso: Permiso): string {
+  return permiso.replace(/\./g, '_');
+}
+
+/**
  * Constructor privado. Produce la `Autorizacion<P, T>` verificada internamente.
  */
 function construirAutorizacion<P extends Permiso, T extends TipoRecurso>(
@@ -246,7 +255,7 @@ async function emitirEventoAutorizacion(
         tipoRecurso: tipo,
         idRecurso: idRecurso as string,
         clasificacion,
-        permisoEvaluado: permiso,
+        permisoEvaluado: convertirPermisoAlPrismaEnum(permiso) as any,
         resultado: 'PERMITIDO',
         origenSesionId: contexto.sesion as string,
         origenCanal: 'API',
@@ -302,7 +311,7 @@ async function emitirEventoDenegacion(
         tipoRecurso: tipo,
         idRecurso: idRecurso as string,
         clasificacion,
-        permisoEvaluado: permiso,
+        permisoEvaluado: convertirPermisoAlPrismaEnum(permiso) as any,
         resultado: 'DENEGADO',
         motivo,
         origenSesionId: contexto.sesion as string,

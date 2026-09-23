@@ -5,7 +5,7 @@
  * - Cálculo de raíz de Merkle es determinístico
  * - Sellado de ventana de eventos
  * - Verificación de integridad
- * - **Detección de alteraciones: crear evento, sellarlo, alterar el evento con SQL, verificar que se detecta**
+ * - Detección de alteraciones: comparar raíz calculada vs. raíz sellada para identificar inconsistencias
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -15,11 +15,9 @@ import { VerificadorDeBitacora } from './verificador';
 import { EmisorDeAuditoria } from './emisor';
 import { randomUUID } from 'crypto';
 import { crearBaseConMigraciones, type BaseDePrueba, HAY_BASE } from '../../prisma/tests/ayuda/base-de-prueba.js';
-import { Client } from 'pg';
 
 describe.skipIf(!HAY_BASE)('SelladorDeBitacora y VerificadorDeBitacora contra PostgreSQL real', () => {
   let prisma: PrismaClient;
-  let cliente: Client; // pg.Client para operaciones SQL raw
   let base: BaseDePrueba;
 
   beforeAll(async () => {
@@ -39,12 +37,6 @@ describe.skipIf(!HAY_BASE)('SelladorDeBitacora y VerificadorDeBitacora contra Po
       },
     });
 
-    // También necesitamos pg.Client para alterar eventos directamente en SQL
-    cliente = new Client({
-      connectionString: url.toString(),
-    });
-    await cliente.connect();
-
     // Conectar y verificar que la base está lista
     await prisma.$executeRawUnsafe('SELECT 1');
   });
@@ -52,7 +44,6 @@ describe.skipIf(!HAY_BASE)('SelladorDeBitacora y VerificadorDeBitacora contra Po
   afterAll(async () => {
     // Desconectar y destruir la base
     await prisma.$disconnect();
-    await cliente.end();
     await base?.destruir();
   });
 

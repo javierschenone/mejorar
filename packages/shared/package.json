@@ -30,6 +30,14 @@
     "./motor-legal/tiempo": {
       "types": "./dist/motor-legal/tiempo/index.d.ts",
       "default": "./dist/motor-legal/tiempo/index.js"
+    },
+    "./identidad/contrato/v1": {
+      "types": "./dist/identidad/contrato/v1.d.ts",
+      "default": "./dist/identidad/contrato/v1.js"
+    },
+    "./identidad/autorizacion": {
+      "types": "./dist/identidad/autorizacion.d.ts",
+      "default": "./dist/identidad/autorizacion.js"
     }
   },
   "scripts": {

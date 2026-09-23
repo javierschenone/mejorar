@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import path from 'path';
 
 /**
  * Configuración de tests de `@mejorar/api` (feature 004, tarea T-03).
@@ -29,6 +30,11 @@ import { defineConfig } from 'vitest/config';
  * que un `pnpm test` distraído apunte a una base con datos.
  */
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@mejorar/shared': path.resolve(__dirname, '../../packages/shared/dist'),
+    },
+  },
   test: {
     environment: 'node',
     include: ['prisma/tests/**/*.test.ts', 'src/**/*.test.ts'],
