@@ -4,6 +4,15 @@
  * Implementa ADR-022: la autorización es una capacidad tipada por permiso y recurso.
  * El contexto no tiene rol, y la prueba es el único argumento que la capa de datos
  * acepta.
+ *
+ * Nota sobre inconstruibilidad:
+ * El tipo `Autorizacion<P, T>` se garantiza inconstruible fuera de `autorizar.ts` mediante
+ * una marca privada (Symbol). Sin embargo, usar `as Autorizacion<P, T>` en otros módulos
+ * puede bypassear esta garantía. Una futura mejora sería enforcar esto con:
+ * - Un símbolo único por constructor (`marcaAutorizacionPrivada` en `autorizar.ts`)
+ * - Una regla de lint que prohíba `as Autorizacion` fuera del módulo
+ * - O una clase privada con constructor sellado
+ * Por ahora es una garantía de convención, no de compilador.
  */
 
 import type {
@@ -45,10 +54,14 @@ export interface ResolvedorDeAlcance {
 
 /**
  * Resultado de resolver el alcance. Traducido del contrato §3.
+ *
+ * Extensión local: incluimos `titularRecurso` en `ES_TITULAR` y `ESTA_ASIGNADO` para poder
+ * emitir eventos de auditoría con `titularAfectado` correcto (CA-21, ADR-028).
+ * En `ES_TITULAR`, es siempre el mismo sujeto. En `ESTA_ASIGNADO`, es el dueño real del recurso.
  */
 export type AlcanceResuelto =
-  | { readonly clase: 'ES_TITULAR' }
-  | { readonly clase: 'ESTA_ASIGNADO'; readonly desde: Instante }
+  | { readonly clase: 'ES_TITULAR'; readonly titularRecurso: IdUsuario }
+  | { readonly clase: 'ESTA_ASIGNADO'; readonly desde: Instante; readonly titularRecurso: IdUsuario }
   | { readonly clase: 'ALCANCE_GLOBAL' }
   | { readonly clase: 'SIN_RELACION' }
   | { readonly clase: 'COLECCION'; readonly criterio: CriterioDeAlcance };

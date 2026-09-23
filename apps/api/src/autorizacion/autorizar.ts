@@ -120,7 +120,7 @@ export async function autorizar<P extends Permiso, T extends TipoRecurso>(
   // 3. Verificar ventana de reautenticación si aplica
   if (exigencia.ventanaDeReautenticacion !== null) {
     if (reautenticacionVencida(contexto.autenticadoEn, exigencia.ventanaDeReautenticacion, momento)) {
-      // Emitir evento de denegación
+      // Emitir evento de denegación (sin alcanceResuelto porque falla antes)
       const eventoFallido = await emitirEventoDenegacion(
         contexto.sujeto,
         solicitud.permiso,
@@ -128,6 +128,7 @@ export async function autorizar<P extends Permiso, T extends TipoRecurso>(
         solicitud.tipo,
         solicitud.id,
         exigencia.clasificacion,
+        null,
         contexto,
         prisma,
         momento,
@@ -147,7 +148,7 @@ export async function autorizar<P extends Permiso, T extends TipoRecurso>(
   const decision = decidirAcceso(contexto, solicitud.permiso, alcanceResuelto, exigencia);
 
   if (decision.decision === 'DENEGADO') {
-    // Emitir evento de denegación
+    // Emitir evento de denegación (con alcanceResuelto para titularAfectado)
     const eventoFallido = await emitirEventoDenegacion(
       contexto.sujeto,
       solicitud.permiso,
@@ -155,6 +156,7 @@ export async function autorizar<P extends Permiso, T extends TipoRecurso>(
       solicitud.tipo,
       solicitud.id,
       exigencia.clasificacion,
+      alcanceResuelto,
       contexto,
       prisma,
       momento,
@@ -178,6 +180,7 @@ export async function autorizar<P extends Permiso, T extends TipoRecurso>(
       solicitud.tipo,
       solicitud.id,
       exigencia.clasificacion,
+      alcanceResuelto,
       contexto,
       prisma,
       momento,
@@ -206,6 +209,11 @@ export async function autorizar<P extends Permiso, T extends TipoRecurso>(
  * Emite un evento de autorización exitosa (CA-21, ADR-028).
  * Se escribe **antes** de entregar el dato, en la misma conexión.
  * Si falla, la petición falla con 503.
+ *
+ * CA-21: `titularAfectado` debe ser el dueño real del recurso, no quien actúa:
+ * - Si el sujeto ES_TITULAR, es el mismo sujeto.
+ * - Si el sujeto ESTA_ASIGNADO (p.ej., abogado), es el titular del recurso.
+ * Eso permite que el titular consulte "quién miró mi información" vía `obtenerBitacoraDeTitular`.
  */
 async function emitirEventoAutorizacion(
   sujeto: IdUsuario,
@@ -213,10 +221,20 @@ async function emitirEventoAutorizacion(
   tipo: TipoRecurso,
   idRecurso: IdRecurso<any>,
   clasificacion: 'PERSONAL' | 'PATRIMONIAL_SENSIBLE',
+  alcanceResuelto: AlcanceResuelto,
   contexto: ContextoDeAcceso,
   prisma: PrismaClient,
   momento: Instante,
 ): Promise<string> {
+  // Determinar titularAfectado según el alcance
+  let titularAfectado: string | null = null;
+  if (alcanceResuelto.clase === 'ES_TITULAR') {
+    titularAfectado = alcanceResuelto.titularRecurso as string;
+  } else if (alcanceResuelto.clase === 'ESTA_ASIGNADO') {
+    titularAfectado = alcanceResuelto.titularRecurso as string;
+  }
+  // Para otros casos (ALCANCE_GLOBAL, SIN_RELACION, COLECCION) no hay titular específico
+
   try {
     const evento = await prisma.eventoAuditoria.create({
       data: {
@@ -224,7 +242,7 @@ async function emitirEventoAutorizacion(
         momento: new Date(momento),
         accion: 'RECURSO_LEIDO', // O RECURSO_MODIFICADO según la acción
         sujeto: sujeto as string,
-        titularAfectado: sujeto as string,
+        titularAfectado,
         tipoRecurso: tipo,
         idRecurso: idRecurso as string,
         clasificacion,
@@ -245,6 +263,11 @@ async function emitirEventoAutorizacion(
 
 /**
  * Emite un evento de denegación (ADR-028).
+ *
+ * Nota: para eventos de denegación, `titularAfectado` es más complejo porque la denegación
+ * puede ocurrir antes de resolver completamente el alcance. Por ahora lo asignamos al sujeto
+ * que intentó acceder, pero en futuras features (cuando un abogado intente acceder a un caso
+ * que no es suyo) debería ser el titular real del recurso si es conocido.
  */
 async function emitirEventoDenegacion(
   sujeto: IdUsuario,
@@ -253,10 +276,21 @@ async function emitirEventoDenegacion(
   tipo: TipoRecurso,
   idRecurso: IdRecurso<any>,
   clasificacion: 'PERSONAL' | 'PATRIMONIAL_SENSIBLE' | 'INTERNO' | 'PUBLICO',
+  alcanceResuelto: AlcanceResuelto | null,
   contexto: ContextoDeAcceso,
   prisma: PrismaClient,
   momento: Instante,
 ): Promise<string> {
+  // Determinar titularAfectado según el alcance (si se resolvió)
+  let titularAfectado: string | null = null;
+  if (alcanceResuelto) {
+    if (alcanceResuelto.clase === 'ES_TITULAR') {
+      titularAfectado = alcanceResuelto.titularRecurso as string;
+    } else if (alcanceResuelto.clase === 'ESTA_ASIGNADO') {
+      titularAfectado = alcanceResuelto.titularRecurso as string;
+    }
+  }
+
   try {
     const evento = await prisma.eventoAuditoria.create({
       data: {
@@ -264,7 +298,7 @@ async function emitirEventoDenegacion(
         momento: new Date(momento),
         accion: 'ACCESO_DENEGADO',
         sujeto: sujeto as string,
-        titularAfectado: sujeto as string,
+        titularAfectado,
         tipoRecurso: tipo,
         idRecurso: idRecurso as string,
         clasificacion,
