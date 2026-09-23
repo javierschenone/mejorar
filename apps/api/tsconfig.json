@@ -1,8 +1,12 @@
 {
-  // Sólo para `typecheck`. Este paquete no compila a `dist`: hoy no tiene
-  // código de aplicación —`src/` está vacío hasta que `dev-backend` escriba la
-  // API NestJS en la feature 007— y lo único que hay en TypeScript son los
-  // tests del esquema, que ejecuta Vitest con su propio transpilador.
+  // Sólo para `typecheck` (lo corre `build`). Este paquete no compila a `dist`:
+  // Vitest ejecuta con su propio transpilador. Cubre `src/**` —el código de
+  // aplicación (autorización, auditoría; feature 002, T-04)— y los tests del
+  // esquema en `prisma/**`.
+  //
+  // Hasta el commit que agregó `src/**/*.ts` acá, `include` sólo tenía
+  // `prisma/**`: ningún archivo de `src/` se typechequeaba, y un "build limpio"
+  // no decía nada sobre ellos. Si se agrega un árbol nuevo de código, va acá.
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     // `ESNext` + `bundler` y no el `commonjs` de la base: los tests usan
@@ -13,5 +17,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["prisma/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "prisma/**/*.ts", "vitest.config.ts"]
 }

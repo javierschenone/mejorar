@@ -14,6 +14,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { EmisorDeAuditoria } from './emisor';
 import { randomUUID } from 'crypto';
+import type { IdSesion } from '@mejorar/shared/identidad/contrato/v1';
 import { crearBaseConMigraciones, type BaseDePrueba, HAY_BASE } from '../../prisma/tests/ayuda/base-de-prueba.js';
 
 describe.skipIf(!HAY_BASE)('EmisorDeAuditoria contra PostgreSQL real', () => {
@@ -50,7 +51,7 @@ describe.skipIf(!HAY_BASE)('EmisorDeAuditoria contra PostgreSQL real', () => {
   it('emite evento para recurso PERSONAL', async () => {
     const emisor = new EmisorDeAuditoria(prisma);
     const usuarioId = `usuario_${randomUUID()}`;
-    const sesionId = `sesion_${randomUUID()}`;
+    const sesionId = `sesion_${randomUUID()}` as IdSesion;
 
     // Permitir NULL para sujeto (acciones del sistema) para evitar FK
     const resultado = await emisor.emitir({
@@ -95,7 +96,7 @@ describe.skipIf(!HAY_BASE)('EmisorDeAuditoria contra PostgreSQL real', () => {
   it('emite evento para recurso PATRIMONIAL_SENSIBLE', async () => {
     const emisor = new EmisorDeAuditoria(prisma);
     const casosId = `caso_${randomUUID()}`;
-    const sesionId = `sesion_${randomUUID()}`;
+    const sesionId = `sesion_${randomUUID()}` as IdSesion;
 
     const resultado = await emisor.emitir({
       accion: 'RECURSO_LEIDO',
@@ -133,7 +134,10 @@ describe.skipIf(!HAY_BASE)('EmisorDeAuditoria contra PostgreSQL real', () => {
       accion: 'RECURSO_LEIDO',
       sujeto: null,
       titularAfectado: null,
-      tipoRecurso: 'ARTICULO',
+      // Sin `tipoRecurso`: ningún tipo del catálogo cerrado del contrato
+      // (`TipoRecurso`, v1) está clasificado PUBLICO ni INTERNO —todos son
+      // PERSONAL o PATRIMONIAL_SENSIBLE (registro.ts)—, y el emisor decide sólo
+      // por `clasificacion`. Antes decía 'ARTICULO', que no existe en el contrato.
       idRecurso: `art_${randomUUID()}`,
       clasificacion: 'PUBLICO',
       resultado: 'PERMITIDO',
@@ -157,7 +161,8 @@ describe.skipIf(!HAY_BASE)('EmisorDeAuditoria contra PostgreSQL real', () => {
       accion: 'RECURSO_LEIDO',
       sujeto: null,
       titularAfectado: null,
-      tipoRecurso: 'CONFIGURACION',
+      // Sin `tipoRecurso`, por lo mismo que el caso PUBLICO. Antes decía
+      // 'CONFIGURACION', que no existe en el contrato.
       idRecurso: 'cfg_1',
       clasificacion: 'INTERNO',
       resultado: 'PERMITIDO',
@@ -176,7 +181,7 @@ describe.skipIf(!HAY_BASE)('EmisorDeAuditoria contra PostgreSQL real', () => {
   it('contentido de datos se serializa correctamente', async () => {
     const emisor = new EmisorDeAuditoria(prisma);
     const usuarioId = `usuario_${randomUUID()}`;
-    const sesionId = `sesion_${randomUUID()}`;
+    const sesionId = `sesion_${randomUUID()}` as IdSesion;
 
     // Evento sin datos adicionales (la restricción CHECK en la base es muy específica)
     const resultado = await emisor.emitir({
@@ -221,7 +226,6 @@ describe.skipIf(!HAY_BASE)('EmisorDeAuditoria contra PostgreSQL real', () => {
         idRecurso: 'id_valido',
         clasificacion: 'PERSONAL',
         resultado: 'PERMITIDO',
-        origenSesionId: null,
         origenCanal: 'API' as any,
         idCorrelacion: 'corr_valida',
       }),
@@ -230,7 +234,7 @@ describe.skipIf(!HAY_BASE)('EmisorDeAuditoria contra PostgreSQL real', () => {
 
   it('emite múltiples eventos en lote', async () => {
     const emisor = new EmisorDeAuditoria(prisma);
-    const sesionId = `sesion_${randomUUID()}`;
+    const sesionId = `sesion_${randomUUID()}` as IdSesion;
 
     const solicitudes = [
       {

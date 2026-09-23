@@ -15,6 +15,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@mejorar/shared": "workspace:*",
     "@prisma/client": "6.19.3"
   },
   "devDependencies": {

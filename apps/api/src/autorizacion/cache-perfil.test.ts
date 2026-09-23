@@ -9,7 +9,12 @@
 
 import { describe, it, expect } from 'vitest';
 import { CacheEnMemoria, GestorCacheDePerfiles } from './cache-perfil';
-import type { PerfilDeAutorizacion } from '@mejorar/shared/identidad/contrato/v1';
+import type {
+  FechaCivil,
+  IdUsuario,
+  Instante,
+  PerfilDeAutorizacion,
+} from '@mejorar/shared/identidad/contrato/v1';
 
 describe('CacheEnMemoria', () => {
   it('almacena y recupera valores', async () => {
@@ -120,7 +125,18 @@ describe('GestorCacheDePerfiles', () => {
       estadoMfa: 'ACTIVO',
       verificacionProfesional: {
         estado: 'VIGENTE',
-        vigenciaHasta: new Date().toISOString() as any,
+        verificadaEn: '2026-09-01T12:00:00.000Z' as Instante,
+        vigenciaHasta: '2027-12-31' as FechaCivil,
+        evidencia: {
+          colegio: 'Colegio de prueba',
+          jurisdiccion: 'CABA',
+          numeroDeMatricula: 'T-0001',
+          tomoYFolio: null,
+          claseDeConstancia: 'CONSULTA_AL_PADRON_PUBLICO',
+          fechaDeLaConstancia: '2026-09-01' as FechaCivil,
+          referenciaDelDocumento: 'doc-prueba-001',
+          verificadaPor: 'admin-001' as IdUsuario,
+        },
       },
       ajustes: [],
     };
