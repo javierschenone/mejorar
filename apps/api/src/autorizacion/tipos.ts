@@ -55,15 +55,23 @@ export interface ResolvedorDeAlcance {
 /**
  * Resultado de resolver el alcance. Traducido del contrato §3.
  *
- * Extensión local: incluimos `titularRecurso` en `ES_TITULAR` y `ESTA_ASIGNADO` para poder
- * emitir eventos de auditoría con `titularAfectado` correcto (CA-21, ADR-028).
- * En `ES_TITULAR`, es siempre el mismo sujeto. En `ESTA_ASIGNADO`, es el dueño real del recurso.
+ * Extensión local: el resolvedor informa `titularRecurso` —el dueño real del recurso— para
+ * que `autorizar` emita el evento con `titularAfectado` correcto (CA-21, ADR-028 §3).
+ * `decidirAcceso` (dominio) ignora el campo: no participa de la decisión, sólo de la auditoría.
+ *
+ * - `ES_TITULAR`: obligatorio; es el mismo sujeto.
+ * - `ESTA_ASIGNADO`: obligatorio; es el cliente dueño del caso, no el abogado que accede.
+ * - `ALCANCE_GLOBAL`: opcional; un administrador que lee el perfil de X tiene que quedar
+ *   registrado con `titularAfectado = X`, o X nunca se entera de que lo miraron. Se omite
+ *   sólo cuando el recurso no pertenece a ninguna persona.
+ * - `SIN_RELACION`: opcional; el intento denegado de un abogado sobre un caso ajeno es
+ *   información que el titular de ese caso tiene derecho a ver.
  */
 export type AlcanceResuelto =
   | { readonly clase: 'ES_TITULAR'; readonly titularRecurso: IdUsuario }
   | { readonly clase: 'ESTA_ASIGNADO'; readonly desde: Instante; readonly titularRecurso: IdUsuario }
-  | { readonly clase: 'ALCANCE_GLOBAL' }
-  | { readonly clase: 'SIN_RELACION' }
+  | { readonly clase: 'ALCANCE_GLOBAL'; readonly titularRecurso?: IdUsuario }
+  | { readonly clase: 'SIN_RELACION'; readonly titularRecurso?: IdUsuario }
   | { readonly clase: 'COLECCION'; readonly criterio: CriterioDeAlcance };
 
 export type CriterioDeAlcance =

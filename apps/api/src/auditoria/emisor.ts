@@ -16,17 +16,19 @@
 import type {
   AccionAuditada,
   ClasificacionDato,
-  DispositivoClase,
-  IdEventoAuditoria,
   IdSesion,
   IdUsuario,
-  Instante,
   Permiso,
-  ResultadoEvento,
   TipoRecurso,
 } from '@mejorar/shared/identidad/contrato/v1';
-import type { CanalDeOrigen, MotivoDenegacion } from '@prisma/client';
-import type { PrismaClient } from '@prisma/client';
+import type {
+  CanalDeOrigen,
+  DispositivoClase,
+  MotivoDenegacion,
+  PrismaClient,
+  ResultadoEvento,
+} from '@prisma/client';
+import { convertirPermisoAlPrismaEnum } from './permiso-en-base';
 
 /**
  * Estructura de un evento de auditoría a emitir.
@@ -88,7 +90,11 @@ export class EmisorDeAuditoria {
           tipoRecurso: solicitud.tipoRecurso,
           idRecurso: solicitud.idRecurso,
           clasificacion: solicitud.clasificacion,
-          permisoEvaluado: solicitud.permisoEvaluado,
+          // El contrato dice "perfil.leer.propio"; Prisma sólo acepta "perfil_leer_propio".
+          permisoEvaluado:
+            solicitud.permisoEvaluado === undefined
+              ? undefined
+              : convertirPermisoAlPrismaEnum(solicitud.permisoEvaluado),
           resultado: solicitud.resultado,
           motivo: solicitud.motivo,
           origenSesionId: solicitud.origenSesionId as string | undefined,

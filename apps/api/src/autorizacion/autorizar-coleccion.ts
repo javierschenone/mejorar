@@ -49,7 +49,7 @@ function construirFiltro<P extends Permiso, T extends TipoRecurso>(
     sesion,
     momento,
     evento,
-  } as FiltroDeAlcance<P, T>;
+  } as unknown as FiltroDeAlcance<P, T>;
 }
 
 /**

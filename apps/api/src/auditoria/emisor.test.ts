@@ -60,7 +60,7 @@ describe.skipIf(!HAY_BASE)('EmisorDeAuditoria contra PostgreSQL real', () => {
       tipoRecurso: 'USUARIO',
       idRecurso: usuarioId,
       clasificacion: 'PERSONAL',
-      permisoEvaluado: 'perfil_leer_propio' as any,
+      permisoEvaluado: 'perfil.leer.propio',
       resultado: 'PERMITIDO',
       origenSesionId: sesionId,
       origenCanal: 'API',
@@ -83,6 +83,13 @@ describe.skipIf(!HAY_BASE)('EmisorDeAuditoria contra PostgreSQL real', () => {
     expect(evento.clasificacion).toBe('PERSONAL');
     expect(evento.accion).toBe('RECURSO_LEIDO');
     expect(evento.resultado).toBe('PERMITIDO');
+
+    // El permiso entra en formato de contrato y la base guarda ese mismo literal (@map).
+    const { rows } = await base.cliente.query<{ permiso: string }>(
+      `SELECT "permisoEvaluado"::text AS permiso FROM auditoria."EventoAuditoria" WHERE "id" = $1`,
+      [resultado!.eventoId],
+    );
+    expect(rows).toEqual([{ permiso: 'perfil.leer.propio' }]);
   });
 
   it('emite evento para recurso PATRIMONIAL_SENSIBLE', async () => {
@@ -97,7 +104,7 @@ describe.skipIf(!HAY_BASE)('EmisorDeAuditoria contra PostgreSQL real', () => {
       tipoRecurso: 'CASO',
       idRecurso: casosId,
       clasificacion: 'PATRIMONIAL_SENSIBLE',
-      permisoEvaluado: 'perfil_leer_propio' as any,
+      permisoEvaluado: 'perfil.leer.propio',
       resultado: 'PERMITIDO',
       origenSesionId: sesionId,
       origenCanal: 'API',

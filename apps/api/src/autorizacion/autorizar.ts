@@ -26,6 +26,7 @@ import type {
 import type { PrismaClient } from '@prisma/client';
 import type { AlcanceResuelto, ErrorDeAutorizacion, SolicitudDeAutorizacion } from './tipos';
 import { registroDeRecursos } from './registro';
+import { convertirPermisoAlPrismaEnum } from '../auditoria/permiso-en-base';
 
 /**
  * Marca privada que hace inconstruible el tipo `Autorizacion` fuera de este módulo.
@@ -34,12 +35,12 @@ import { registroDeRecursos } from './registro';
 const marcaAutorizacionPrivada = Symbol('Autorizacion');
 
 /**
- * Convierte un permiso del contrato (con puntos) al formato de enum de Prisma (snake_case).
- * El contrato usa "usuario.leer" pero Prisma usa "usuario_leer" en el TypeScript
- * y "usuario.leer" en la base.
+ * Sobre los datos de quién es el acceso (CA-21, ADR-028 §3). Lo informa el resolvedor;
+ * nunca se deduce del sujeto, que es quién actúa.
  */
-function convertirPermisoAlPrismaEnum(permiso: Permiso): string {
-  return permiso.replace(/\./g, '_');
+function titularAfectadoDe(alcance: AlcanceResuelto | null): string | null {
+  if (alcance === null || alcance.clase === 'COLECCION') return null;
+  return alcance.titularRecurso ?? null;
 }
 
 /**
@@ -61,7 +62,7 @@ function construirAutorizacion<P extends Permiso, T extends TipoRecurso>(
     sesion,
     momento,
     evento: eventoId as any,
-  } as Autorizacion<P, T>;
+  } as unknown as Autorizacion<P, T>;
 }
 
 /**
@@ -101,43 +102,45 @@ export async function autorizar<P extends Permiso, T extends TipoRecurso>(
     };
   }
 
-  // 2. Resolver alcance
+  // 2. Resolver alcance. Sin resolvedor no hay forma de saber si el sujeto alcanza el
+  // recurso: se falla cerrado. Suponer ALCANCE_GLOBAL dejaría a cualquier abogado con
+  // `caso.leer.asignado` leer cualquier caso (CA-19) y el evento saldría sin titular (CA-21).
   const resolvedor = registroDeRecursos.obtenerResolvedor(solicitud.tipo);
   if (!resolvedor) {
-    // Algunos tipos pueden no tener resolvedor (p.ej., si están declarados pero no se usan)
-    // En ese caso el alcance es GLOBAL
+    return {
+      ok: false,
+      error: {
+        clase: 'ERROR_INTERNO',
+        motivo: `Tipo de recurso '${solicitud.tipo}' sin resolvedor de alcance registrado`,
+      },
+    };
   }
 
   let alcanceResuelto: AlcanceResuelto;
-  if (resolvedor) {
-    try {
-      alcanceResuelto = await resolvedor.resolver(contexto.sujeto, solicitud.id, momento);
-    } catch (e) {
-      return {
-        ok: false,
-        error: {
-          clase: 'ERROR_INTERNO',
-          motivo: `Error resolviendo alcance para ${solicitud.tipo}: ${e instanceof Error ? e.message : 'desconocido'}`,
-        },
-      };
-    }
-  } else {
-    // Sin resolvedor específico, el alcance es global
-    alcanceResuelto = { clase: 'ALCANCE_GLOBAL' };
+  try {
+    alcanceResuelto = await resolvedor.resolver(contexto.sujeto, solicitud.id, momento);
+  } catch (e) {
+    return {
+      ok: false,
+      error: {
+        clase: 'ERROR_INTERNO',
+        motivo: `Error resolviendo alcance para ${solicitud.tipo}: ${e instanceof Error ? e.message : 'desconocido'}`,
+      },
+    };
   }
 
   // 3. Verificar ventana de reautenticación si aplica
   if (exigencia.ventanaDeReautenticacion !== null) {
     if (reautenticacionVencida(contexto.autenticadoEn, exigencia.ventanaDeReautenticacion, momento)) {
-      // Emitir evento de denegación (sin alcanceResuelto porque falla antes)
-      const eventoFallido = await emitirEventoDenegacion(
+      // El alcance ya está resuelto: el evento lleva el titular del recurso.
+      await emitirEventoDenegacion(
         contexto.sujeto,
         solicitud.permiso,
         'REAUTENTICACION_REQUERIDA',
         solicitud.tipo,
         solicitud.id,
         exigencia.clasificacion,
-        null,
+        alcanceResuelto,
         contexto,
         prisma,
         momento,
@@ -158,7 +161,7 @@ export async function autorizar<P extends Permiso, T extends TipoRecurso>(
 
   if (decision.decision === 'DENEGADO') {
     // Emitir evento de denegación (con alcanceResuelto para titularAfectado)
-    const eventoFallido = await emitirEventoDenegacion(
+    await emitirEventoDenegacion(
       contexto.sujeto,
       solicitud.permiso,
       decision.motivo,
@@ -222,6 +225,7 @@ export async function autorizar<P extends Permiso, T extends TipoRecurso>(
  * CA-21: `titularAfectado` debe ser el dueño real del recurso, no quien actúa:
  * - Si el sujeto ES_TITULAR, es el mismo sujeto.
  * - Si el sujeto ESTA_ASIGNADO (p.ej., abogado), es el titular del recurso.
+ * - Si tiene ALCANCE_GLOBAL (p.ej., administrador), es el titular que informe el resolvedor.
  * Eso permite que el titular consulte "quién miró mi información" vía `obtenerBitacoraDeTitular`.
  */
 async function emitirEventoAutorizacion(
@@ -235,14 +239,7 @@ async function emitirEventoAutorizacion(
   prisma: PrismaClient,
   momento: Instante,
 ): Promise<string> {
-  // Determinar titularAfectado según el alcance
-  let titularAfectado: string | null = null;
-  if (alcanceResuelto.clase === 'ES_TITULAR') {
-    titularAfectado = alcanceResuelto.titularRecurso as string;
-  } else if (alcanceResuelto.clase === 'ESTA_ASIGNADO') {
-    titularAfectado = alcanceResuelto.titularRecurso as string;
-  }
-  // Para otros casos (ALCANCE_GLOBAL, SIN_RELACION, COLECCION) no hay titular específico
+  const titularAfectado = titularAfectadoDe(alcanceResuelto);
 
   try {
     const evento = await prisma.eventoAuditoria.create({
@@ -255,7 +252,7 @@ async function emitirEventoAutorizacion(
         tipoRecurso: tipo,
         idRecurso: idRecurso as string,
         clasificacion,
-        permisoEvaluado: convertirPermisoAlPrismaEnum(permiso) as any,
+        permisoEvaluado: convertirPermisoAlPrismaEnum(permiso),
         resultado: 'PERMITIDO',
         origenSesionId: contexto.sesion as string,
         origenCanal: 'API',
@@ -273,10 +270,9 @@ async function emitirEventoAutorizacion(
 /**
  * Emite un evento de denegación (ADR-028).
  *
- * Nota: para eventos de denegación, `titularAfectado` es más complejo porque la denegación
- * puede ocurrir antes de resolver completamente el alcance. Por ahora lo asignamos al sujeto
- * que intentó acceder, pero en futuras features (cuando un abogado intente acceder a un caso
- * que no es suyo) debería ser el titular real del recurso si es conocido.
+ * `titularAfectado` es el titular que informó el resolvedor, si lo informó: el intento
+ * denegado de un abogado sobre un caso ajeno queda a la vista del dueño de ese caso.
+ * Nunca es el sujeto que intentó acceder, salvo que sea también el titular.
  */
 async function emitirEventoDenegacion(
   sujeto: IdUsuario,
@@ -290,15 +286,7 @@ async function emitirEventoDenegacion(
   prisma: PrismaClient,
   momento: Instante,
 ): Promise<string> {
-  // Determinar titularAfectado según el alcance (si se resolvió)
-  let titularAfectado: string | null = null;
-  if (alcanceResuelto) {
-    if (alcanceResuelto.clase === 'ES_TITULAR') {
-      titularAfectado = alcanceResuelto.titularRecurso as string;
-    } else if (alcanceResuelto.clase === 'ESTA_ASIGNADO') {
-      titularAfectado = alcanceResuelto.titularRecurso as string;
-    }
-  }
+  const titularAfectado = titularAfectadoDe(alcanceResuelto);
 
   try {
     const evento = await prisma.eventoAuditoria.create({
@@ -311,7 +299,7 @@ async function emitirEventoDenegacion(
         tipoRecurso: tipo,
         idRecurso: idRecurso as string,
         clasificacion,
-        permisoEvaluado: convertirPermisoAlPrismaEnum(permiso) as any,
+        permisoEvaluado: convertirPermisoAlPrismaEnum(permiso),
         resultado: 'DENEGADO',
         motivo,
         origenSesionId: contexto.sesion as string,
