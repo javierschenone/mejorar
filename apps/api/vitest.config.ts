@@ -31,7 +31,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['prisma/tests/**/*.test.ts'],
+    include: ['prisma/tests/**/*.test.ts', 'src/**/*.test.ts'],
     reporters: ['default'],
     // Cada archivo crea su propia base descartable. Serializados para no abrir
     // N conexiones simultáneas contra el Postgres chico de un job de CI.
